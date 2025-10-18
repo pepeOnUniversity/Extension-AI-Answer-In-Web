@@ -13,11 +13,27 @@ window.addEventListener('message', (event) => {
   }
 });
 
+// Listen for messages from background script for OCR processing
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'process_ocr_and_ai') {
+    processOCR(request.imageData)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true; // Will respond asynchronously
+  }
+});
+
 /**
  * Initialize selection mode
  */
 function startSelectionMode() {
   if (isSelectionMode) return;
+  
+  // Check if extension context is still valid
+  if (!chrome.runtime?.id) {
+    showError('Extension context invalidated. Please reload the extension and refresh this page.');
+    return;
+  }
   
   isSelectionMode = true;
   createSelectionOverlay();
@@ -191,18 +207,48 @@ function handleMouseUp(event) {
   showLoadingIndicator();
   
   // Send coordinates to background script
-  chrome.runtime.sendMessage({
-    action: 'capture_area',
-    coordinates: currentSelection
-  }, (response) => {
+  try {
+    chrome.runtime.sendMessage({
+      action: 'capture_area',
+      coordinates: currentSelection
+    }, (response) => {
+      hideLoadingIndicator();
+      
+      // Check for extension context invalidation
+      if (chrome.runtime.lastError) {
+        showError('Extension context invalidated. Please reload the extension and refresh this page.');
+        return;
+      }
+      
+      if (response && response.success) {
+        showAIResult(response.extractedText, response.aiResponse, currentSelection);
+      } else {
+        showError(response?.error || 'Failed to process selection');
+      }
+    });
+  } catch (error) {
     hideLoadingIndicator();
-    
-    if (response && response.success) {
-      showAIResult(response.extractedText, response.aiResponse, currentSelection);
+    showError('Extension context invalidated. Please reload the extension and refresh this page.');
+  }
+  
+  // Update loading status periodically
+  let loadingStep = 0;
+  const loadingSteps = [
+    '📸 Capturing area...',
+    '✂️ Processing image...',
+    '👁️ Extracting text automatically...',
+    '🤖 Getting AI answer...'
+  ];
+  
+  window.loadingUpdateInterval = setInterval(() => {
+    const statusElement = document.getElementById('loading-status');
+    if (statusElement && loadingStep < loadingSteps.length - 1) {
+      loadingStep++;
+      statusElement.textContent = loadingSteps[loadingStep];
     } else {
-      showError(response?.error || 'Failed to process selection');
+      clearInterval(window.loadingUpdateInterval);
     }
-  });
+  }, 3000);
 }
 
 /**
@@ -267,7 +313,8 @@ function showLoadingIndicator() {
   `;
   loading.innerHTML = `
     <div style="margin-bottom: 10px;">🤖 AI Answer Assistant</div>
-    <div style="font-size: 14px;">Processing your selection...</div>
+    <div id="loading-status" style="font-size: 14px;">📸 Capturing area...</div>
+    <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 8px;">Auto-processing text and generating answer...</div>
   `;
   
   document.body.appendChild(loading);
@@ -280,6 +327,11 @@ function hideLoadingIndicator() {
   const loading = document.getElementById('ai-loading');
   if (loading) {
     loading.remove();
+  }
+  
+  // Clear any running intervals
+  if (window.loadingUpdateInterval) {
+    clearInterval(window.loadingUpdateInterval);
   }
 }
 
@@ -404,6 +456,192 @@ function showAIResult(extractedText, aiResponse, coordinates) {
     }
   }, 30000);
 }
+
+/**
+ * Process OCR using multiple free services with fallback
+ */
+async function processOCR(imageDataUrl) {
+  console.log('Starting free OCR processing with fallback services...');
+  
+  // Try OCR services first (but don't let them block manual input)
+  const ocrServices = [
+    () => tryOCRSpace(imageDataUrl),
+    () => tryImageToText(imageDataUrl)
+  ];
+  
+  // Try automatic OCR services with shorter timeouts
+  for (let i = 0; i < ocrServices.length; i++) {
+    try {
+      console.log(`Trying OCR service ${i + 1}...`);
+      const result = await Promise.race([
+        ocrServices[i](),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Service timeout')), 8000))
+      ]);
+      
+      if (result.success) {
+        return result;
+      }
+      console.log(`Service ${i + 1} failed:`, result.error);
+    } catch (error) {
+      console.log(`Service ${i + 1} error:`, error.message);
+    }
+  }
+  
+  // All automatic services failed - show manual input
+  console.log('All OCR services failed, showing manual input...');
+  return await tryManualInput(imageDataUrl);
+}
+
+/**
+ * Try OCR.space API
+ */
+async function tryOCRSpace(imageDataUrl) {
+  const base64Image = imageDataUrl.split(',')[1];
+  
+  const formData = new FormData();
+  formData.append('base64Image', `data:image/png;base64,${base64Image}`);
+  formData.append('language', 'eng');
+  formData.append('isOverlayRequired', 'false');
+  formData.append('OCREngine', '2');
+  
+  const response = await Promise.race([
+    fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      body: formData
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)
+  ]);
+  
+  if (!response.ok) {
+    throw new Error(`OCR.space error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data.OCRExitCode === 1 && data.ParsedResults && data.ParsedResults[0]) {
+    const extractedText = data.ParsedResults[0].ParsedText.trim();
+    if (extractedText && extractedText.length >= 2) {
+      return { success: true, extractedText };
+    }
+  }
+  
+  throw new Error('No text detected by OCR.space');
+}
+
+/**
+ * Try image-to-text.p.rapidapi.com (free tier)
+ */
+async function tryImageToText(imageDataUrl) {
+  const base64Image = imageDataUrl.split(',')[1];
+  
+  // Convert base64 to blob for the API
+  const byteCharacters = atob(base64Image);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: 'image/png' });
+  
+  const formData = new FormData();
+  formData.append('image', blob, 'image.png');
+  
+  const response = await Promise.race([
+    fetch('https://image-to-text.p.rapidapi.com/', {
+      method: 'POST',
+      headers: {
+        'X-RapidAPI-Key': 'demo', // Use demo key for testing
+        'X-RapidAPI-Host': 'image-to-text.p.rapidapi.com'
+      },
+      body: formData
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)
+  ]);
+  
+  if (!response.ok) {
+    throw new Error(`ImageToText error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data.text && data.text.trim().length >= 2) {
+    return { success: true, extractedText: data.text.trim() };
+  }
+  
+  throw new Error('No text detected by ImageToText');
+}
+
+/**
+ * Manual input as final fallback
+ */
+async function tryManualInput(imageDataUrl) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000002;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, sans-serif;
+    `;
+    
+    const content = document.createElement('div');
+    content.style.cssText = `
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      text-align: center;
+    `;
+    
+    content.innerHTML = `
+      <h3 style="margin-top: 0; color: #333;">📝 Manual Text Input</h3>
+      <p style="color: #666; margin-bottom: 15px;">OCR services are temporarily unavailable. Please type the text/question from your selection:</p>
+      <img src="${imageDataUrl}" style="max-width: 100%; max-height: 200px; margin-bottom: 15px; border: 2px solid #007bff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+      <textarea id="quick-text" placeholder="Type the question or text you want AI to answer..." style="width: 100%; height: 100px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; resize: vertical; font-family: Arial, sans-serif; font-size: 14px;"></textarea>
+      <div style="margin-top: 15px; font-size: 12px; color: #666; margin-bottom: 15px;">💡 Tip: Press Ctrl+Enter to submit quickly</div>
+      <div style="margin-top: 10px;">
+        <button id="submit-quick" style="background: #007bff; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-size: 14px; font-weight: 500;">🤖 Get AI Answer</button>
+        <button id="cancel-quick" style="background: #6c757d; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 14px;">Cancel</button>
+      </div>
+    `;
+    
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+    
+    setTimeout(() => document.getElementById('quick-text').focus(), 100);
+    
+    document.getElementById('submit-quick').onclick = () => {
+      const text = document.getElementById('quick-text').value.trim();
+      modal.remove();
+      
+      if (text.length > 0) {
+        resolve({ success: true, extractedText: text });
+      } else {
+        resolve({ success: false, error: 'No text provided' });
+      }
+    };
+    
+    document.getElementById('cancel-quick').onclick = () => {
+      modal.remove();
+      resolve({ success: false, error: 'Cancelled by user' });
+    };
+    
+    document.getElementById('quick-text').onkeydown = (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        document.getElementById('submit-quick').click();
+      }
+    };
+  });
+}
+
 
 /**
  * Show error message

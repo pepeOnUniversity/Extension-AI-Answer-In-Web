@@ -43,30 +43,54 @@ async function activateScreenSelection() {
  */
 async function handleAreaCapture(coordinates, tabId) {
   try {
+    console.log('Step 1: Capturing screenshot...');
     // Step 1: Capture the visible tab
     const screenshot = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
     
+    console.log('Step 2: Cropping image...');
     // Step 2: Crop the image based on coordinates
     const croppedImage = await cropImage(screenshot, coordinates);
     
-    // Step 3: Extract text using OCR
-    const extractedText = await extractTextFromImage(croppedImage);
-    
-    if (!extractedText.trim()) {
-      return { 
-        success: false, 
-        error: 'No text detected in the selected area' 
-      };
-    }
-    
-    // Step 4: Get AI response
-    const aiResponse = await getAIResponse(extractedText);
-    
-    return {
-      success: true,
-      extractedText: extractedText,
-      aiResponse: aiResponse
-    };
+    console.log('Step 3: Sending to content script for OCR...');
+    // Step 3: Send cropped image to content script for OCR processing
+    return new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, {
+        action: 'process_ocr_and_ai',
+        imageData: croppedImage
+      }, async (response) => {
+        if (response && response.success && response.extractedText) {
+          console.log('Step 4: Getting AI response...');
+          console.log('Extracted text:', response.extractedText);
+          
+          try {
+            // Step 4: Get AI response with timeout
+            const aiResponse = await Promise.race([
+              getAIResponse(response.extractedText),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('AI response timeout')), 15000)
+              )
+            ]);
+            
+            resolve({
+              success: true,
+              extractedText: response.extractedText,
+              aiResponse: aiResponse
+            });
+          } catch (error) {
+            console.error('AI Error:', error);
+            resolve({ 
+              success: false, 
+              error: 'AI processing failed: ' + error.message 
+            });
+          }
+        } else {
+          resolve({
+            success: false,
+            error: response?.error || 'OCR processing failed'
+          });
+        }
+      });
+    });
     
   } catch (error) {
     console.error('Error in handleAreaCapture:', error);
@@ -117,26 +141,6 @@ async function cropImage(dataUrl, coordinates) {
   }
 }
 
-/**
- * Extract text from image using OCR
- */
-async function extractTextFromImage(imageDataUrl) {
-  try {
-    // Import Tesseract.js dynamically
-    const { createWorker } = await import('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
-    
-    const worker = await createWorker(['eng', 'vie']); // English and Vietnamese
-    
-    const { data: { text } } = await worker.recognize(imageDataUrl);
-    
-    await worker.terminate();
-    
-    return text.trim();
-  } catch (error) {
-    console.error('OCR Error:', error);
-    throw new Error('Failed to extract text from image');
-  }
-}
 
 /**
  * Get AI response using OpenAI API

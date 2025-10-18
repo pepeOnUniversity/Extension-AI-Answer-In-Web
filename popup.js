@@ -23,6 +23,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
   
+  // Add diagnostic button
+  const diagnosticBtn = document.createElement('button');
+  diagnosticBtn.textContent = 'Check APIs';
+  diagnosticBtn.className = 'btn btn-primary';
+  diagnosticBtn.style.marginTop = '10px';
+  diagnosticBtn.style.width = '100%';
+  diagnosticBtn.addEventListener('click', checkAPIs);
+  document.querySelector('.button-group').parentNode.insertBefore(diagnosticBtn, document.querySelector('.instructions'));
+  
   /**
    * Load saved API key from chrome storage
    */
@@ -196,6 +205,64 @@ document.addEventListener('DOMContentLoaded', function() {
   function validateApiKeyFormat(apiKey) {
     // Google API keys start with 'AIzaSy' and are typically 39 characters long
     return /^AIzaSy[A-Za-z0-9\-_]{33}$/.test(apiKey);
+  }
+  
+  /**
+   * Check if both Vision API and Generative Language API are enabled
+   */
+  async function checkAPIs() {
+    const apiKey = apiKeyInput.value.trim();
+    
+    if (!apiKey) {
+      showStatus('Please enter your API key first', 'warning');
+      return;
+    }
+    
+    showLoading(true);
+    hideStatus();
+    
+    const results = [];
+    
+    // Test Free OCR Service
+    try {
+      const testImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+      const formData = new FormData();
+      formData.append('base64Image', `data:image/png;base64,${testImage}`);
+      formData.append('language', 'eng');
+      
+      const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (ocrResponse.ok) {
+        results.push('✅ Free OCR Service: Available and working');
+      } else {
+        results.push('⚠️ Free OCR Service: Temporarily unavailable');
+      }
+    } catch (error) {
+      results.push('❌ Free OCR Service: Network error');
+    }
+    
+    // Test Generative Language API
+    try {
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+      
+      if (geminiResponse.status === 403) {
+        results.push('❌ Generative Language API: Not enabled');
+      } else if (geminiResponse.status === 401) {
+        results.push('❌ Generative Language API: Invalid API key');
+      } else if (geminiResponse.ok) {
+        results.push('✅ Generative Language API: Enabled and working');
+      } else {
+        results.push(`⚠️ Generative Language API: Error ${geminiResponse.status}`);
+      }
+    } catch (error) {
+      results.push('❌ Generative Language API: Network error');
+    }
+    
+    showLoading(false);
+    showStatus(results.join('\n'), results.every(r => r.includes('✅')) ? 'success' : 'warning');
   }
   
   /**
