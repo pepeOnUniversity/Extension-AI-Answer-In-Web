@@ -509,7 +509,7 @@ async function tryOCRSpace(imageDataUrl) {
       method: 'POST',
       body: formData
     }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
   ]);
   
   if (!response.ok) {
@@ -555,7 +555,7 @@ async function tryImageToText(imageDataUrl) {
       },
       body: formData
     }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
   ]);
   
   if (!response.ok) {
