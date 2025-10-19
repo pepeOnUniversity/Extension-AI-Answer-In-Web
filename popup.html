@@ -70,6 +70,36 @@
       background: rgba(255, 255, 255, 0.15);
     }
     
+    .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    
+    .form-select:focus {
+      outline: none;
+      border-color: rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .form-select option {
+      background: #2c3e50;
+      color: white;
+    }
+    
+    .api-key-help {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 5px;
+      line-height: 1.3;
+    }
+    
     .button-group {
       display: flex;
       gap: 10px;
@@ -224,15 +254,39 @@
     <!-- Status Message -->
     <div id="status" class="status hidden"></div>
     
-    <!-- API Key Configuration -->
+    <!-- AI Provider Selection -->
     <div class="form-group">
-      <label for="apiKey">Google API Key:</label>
+      <label for="aiProvider">🤖 AI Provider:</label>
+      <select id="aiProvider" class="form-select">
+        <option value="huggingface">🆓 Hugging Face (100% Free)</option>
+        <option value="groq">⚡ Groq (Free Tier)</option>
+        <option value="ollama">🏠 Ollama (Local - 100% Free)</option>
+        <option value="gemini">🔍 Google Gemini (Paid)</option>
+      </select>
+    </div>
+    
+    <!-- API Key Configuration -->
+    <div class="form-group" id="apiKeyGroup">
+      <label for="apiKey" id="apiKeyLabel">API Key:</label>
       <input 
         type="password" 
         id="apiKey" 
-        placeholder="AIzaSy..." 
+        placeholder="Enter your API key..." 
         autocomplete="off"
       >
+      <div id="apiKeyHelp" class="api-key-help"></div>
+    </div>
+    
+    <!-- Ollama URL Configuration -->
+    <div class="form-group hidden" id="ollamaUrlGroup">
+      <label for="ollamaUrl">🏠 Ollama Server URL:</label>
+      <input 
+        type="text" 
+        id="ollamaUrl" 
+        placeholder="http://localhost:11434" 
+        value="http://localhost:11434"
+      >
+      <div class="api-key-help">Make sure Ollama is running locally</div>
     </div>
     
     <!-- Button Group -->
@@ -252,11 +306,13 @@
     <div class="instructions">
       <h3>📋 How to Use:</h3>
       <ul>
-        <li>Enter your Google API key above (only for AI answers)</li>
-        <li>Enable <strong>Generative Language API</strong> in Google Cloud Console</li>
+        <li><strong>🆓 Hugging Face</strong>: 100% Free, no API key needed!</li>
+        <li><strong>⚡ Groq</strong>: Free tier available, get API key at groq.com</li>
+        <li><strong>🏠 Ollama</strong>: Run AI locally, install Ollama first</li>
+        <li><strong>🔍 Google Gemini</strong>: Paid service, requires API key</li>
         <li>Press <strong>Ctrl+Shift+Q</strong> to activate selection mode</li>
         <li>Drag to select any area with text/questions</li>
-        <li>✨ <strong>100% Free</strong>: Free OCR → AI answer!</li>
+        <li>✨ <strong>100% Free OCR</strong> + AI answers!</li>
       </ul>
     </div>
     

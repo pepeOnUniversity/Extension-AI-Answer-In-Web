@@ -147,70 +147,49 @@ async function cropImage(dataUrl, coordinates) {
  */
 async function getAIResponse(text) {
   try {
-    // Get API key from storage
-    const result = await chrome.storage.sync.get(['google_api_key']);
-    const apiKey = result.google_api_key;
+    // Get settings from storage
+    const result = await chrome.storage.sync.get([
+      'ai_provider', 
+      'api_key', 
+      'ollama_url'
+    ]);
     
-    if (!apiKey) {
-      throw new Error('Google API key not found. Please set it in the popup.');
-    }
+    const provider = result.ai_provider || 'huggingface';
+    const apiKey = result.api_key || '';
+    const ollamaUrl = result.ollama_url || 'http://localhost:11434';
     
-    // Auto-discover best available model
-    let modelName = 'models/gemini-pro'; // fallback
-    try {
-      const modelsResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-      if (modelsResponse.ok) {
-        const modelsData = await modelsResponse.json();
-        const models = modelsData.models || [];
-        const suitableModel = models.find(model => 
-          model.supportedGenerationMethods?.includes('generateContent') &&
-          model.name.includes('gemini')
-        ) || models.find(model => 
-          model.supportedGenerationMethods?.includes('generateContent')
-        );
-        if (suitableModel) {
-          modelName = suitableModel.name;
-        }
-      }
-    } catch (e) {
-      console.warn('Could not auto-discover model, using fallback');
-    }
+    // Load AIUtils
+    const aiUtils = await loadAIUtils();
     
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `You are an expert question-answering assistant. The following text was extracted from an image and likely contains a question that needs to be answered. The text may have OCR errors, so interpret it intelligently.\n\nQuestion: "${text}"\n\nPlease provide a complete, accurate answer. For math problems, show steps. For multiple choice, explain the correct answer. Be thorough and educational.`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 500,
-        }
-      })
-    });
+    // Configure AI request
+    const config = {
+      provider: provider,
+      apiKey: apiKey,
+      ollamaUrl: ollamaUrl,
+      maxTokens: 500,
+      temperature: 0.7
+    };
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Gemini API Error: ${errorData.error?.message || 'Unknown error'}`);
-    }
-    
-    const data = await response.json();
-    
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-      throw new Error('Invalid response format from Gemini API');
-    }
-    
-    return data.candidates[0].content.parts[0].text;
+    // Get AI response using the new multi-provider system
+    const aiResponse = await aiUtils.getAIResponse(text, config);
+    return aiResponse;
     
   } catch (error) {
     console.error('AI Response Error:', error);
     throw new Error(`Failed to get AI response: ${error.message}`);
+  }
+}
+
+/**
+ * Load AI utilities from utils/ai.js
+ */
+async function loadAIUtils() {
+  try {
+    // Import AIUtils from utils/ai.js
+    const aiUtilsModule = await import(chrome.runtime.getURL('utils/ai.js'));
+    return aiUtilsModule;
+  } catch (error) {
+    console.error('Failed to load AI utilities:', error);
+    throw new Error('Failed to load AI utilities');
   }
 }

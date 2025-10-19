@@ -3,23 +3,30 @@
 
 document.addEventListener('DOMContentLoaded', function() {
   // DOM elements
+  const aiProviderSelect = document.getElementById('aiProvider');
   const apiKeyInput = document.getElementById('apiKey');
+  const apiKeyGroup = document.getElementById('apiKeyGroup');
+  const apiKeyLabel = document.getElementById('apiKeyLabel');
+  const apiKeyHelp = document.getElementById('apiKeyHelp');
+  const ollamaUrlGroup = document.getElementById('ollamaUrlGroup');
+  const ollamaUrlInput = document.getElementById('ollamaUrl');
   const saveBtn = document.getElementById('saveBtn');
   const testBtn = document.getElementById('testBtn');
   const clearBtn = document.getElementById('clearBtn');
   const statusDiv = document.getElementById('status');
   const loadingDiv = document.getElementById('loading');
   
-  // Load saved API key on startup
-  loadSavedApiKey();
+  // Load saved settings on startup
+  loadSavedSettings();
   
   // Event listeners
-  saveBtn.addEventListener('click', saveApiKey);
+  aiProviderSelect.addEventListener('change', updateProviderUI);
+  saveBtn.addEventListener('click', saveSettings);
   testBtn.addEventListener('click', testConnection);
-  clearBtn.addEventListener('click', clearApiKey);
+  clearBtn.addEventListener('click', clearSettings);
   apiKeyInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
-      saveApiKey();
+      saveSettings();
     }
   });
   
@@ -33,45 +40,111 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelector('.button-group').parentNode.insertBefore(diagnosticBtn, document.querySelector('.instructions'));
   
   /**
-   * Load saved API key from chrome storage
+   * Load saved settings from chrome storage
    */
-  async function loadSavedApiKey() {
+  async function loadSavedSettings() {
     try {
-      const result = await chrome.storage.sync.get(['google_api_key']);
-      if (result.google_api_key) {
-        apiKeyInput.value = result.google_api_key;
-        showStatus('API key loaded', 'success');
-        
-        // Auto-hide success message after 2 seconds
+      const result = await chrome.storage.sync.get([
+        'ai_provider', 
+        'api_key', 
+        'ollama_url'
+      ]);
+      
+      if (result.ai_provider) {
+        aiProviderSelect.value = result.ai_provider;
+      }
+      
+      if (result.api_key) {
+        apiKeyInput.value = result.api_key;
+      }
+      
+      if (result.ollama_url) {
+        ollamaUrlInput.value = result.ollama_url;
+      }
+      
+      updateProviderUI();
+      
+      if (result.api_key || result.ai_provider === 'huggingface' || result.ai_provider === 'ollama') {
+        showStatus('Settings loaded', 'success');
         setTimeout(() => hideStatus(), 2000);
       }
     } catch (error) {
-      console.error('Error loading API key:', error);
-      showStatus('Error loading saved key', 'error');
+      console.error('Error loading settings:', error);
+      showStatus('Error loading saved settings', 'error');
     }
   }
   
   /**
-   * Save API key to chrome storage
+   * Update UI based on selected provider
    */
-  async function saveApiKey() {
-    const apiKey = apiKeyInput.value.trim();
+  function updateProviderUI() {
+    const provider = aiProviderSelect.value;
     
-    if (!apiKey) {
-      showStatus('Please enter an API key', 'warning');
-      apiKeyInput.focus();
-      return;
+    // Update API key section
+    switch (provider) {
+      case 'huggingface':
+        apiKeyGroup.style.display = 'block';
+        apiKeyLabel.textContent = 'Hugging Face Token (Optional):';
+        apiKeyInput.placeholder = 'hf_... (optional for better rate limits)';
+        apiKeyHelp.innerHTML = '🆓 <strong>100% Free!</strong> No API key required, but having one gives better rate limits.';
+        ollamaUrlGroup.classList.add('hidden');
+        break;
+        
+      case 'groq':
+        apiKeyGroup.style.display = 'block';
+        apiKeyLabel.textContent = 'Groq API Key:';
+        apiKeyInput.placeholder = 'gsk_...';
+        apiKeyHelp.innerHTML = '⚡ <strong>Free tier available!</strong> Get your API key at <a href="https://console.groq.com/" target="_blank" style="color: #ffc107;">console.groq.com</a>';
+        ollamaUrlGroup.classList.add('hidden');
+        break;
+        
+      case 'ollama':
+        apiKeyGroup.style.display = 'none';
+        ollamaUrlGroup.classList.remove('hidden');
+        break;
+        
+      case 'gemini':
+        apiKeyGroup.style.display = 'block';
+        apiKeyLabel.textContent = 'Google API Key:';
+        apiKeyInput.placeholder = 'AIzaSy...';
+        apiKeyHelp.innerHTML = '🔍 <strong>Paid service</strong>. Get your API key from Google Cloud Console.';
+        ollamaUrlGroup.classList.add('hidden');
+        break;
+    }
+  }
+  
+  /**
+   * Save settings to chrome storage
+   */
+  async function saveSettings() {
+    const provider = aiProviderSelect.value;
+    const apiKey = apiKeyInput.value.trim();
+    const ollamaUrl = ollamaUrlInput.value.trim();
+    
+    // Validate based on provider
+    if (provider === 'groq' || provider === 'gemini') {
+      if (!apiKey) {
+        showStatus(`Please enter ${provider === 'groq' ? 'Groq' : 'Google'} API key`, 'warning');
+        apiKeyInput.focus();
+        return;
+      }
     }
     
-    if (!validateApiKeyFormat(apiKey)) {
-      showStatus('Invalid API key format', 'error');
-      apiKeyInput.focus();
+    if (provider === 'ollama' && !ollamaUrl) {
+      showStatus('Please enter Ollama server URL', 'warning');
+      ollamaUrlInput.focus();
       return;
     }
     
     try {
-      await chrome.storage.sync.set({ google_api_key: apiKey });
-      showStatus('API key saved successfully!', 'success');
+      const settings = {
+        ai_provider: provider,
+        api_key: apiKey,
+        ollama_url: ollamaUrl
+      };
+      
+      await chrome.storage.sync.set(settings);
+      showStatus('Settings saved successfully!', 'success');
       
       // Change save button to indicate success
       const originalText = saveBtn.textContent;
@@ -86,25 +159,31 @@ document.addEventListener('DOMContentLoaded', function() {
       }, 2000);
       
     } catch (error) {
-      console.error('Error saving API key:', error);
-      showStatus('Error saving API key', 'error');
+      console.error('Error saving settings:', error);
+      showStatus('Error saving settings', 'error');
     }
   }
   
   /**
-   * Test API connection
+   * Test AI provider connection
    */
   async function testConnection() {
+    const provider = aiProviderSelect.value;
     const apiKey = apiKeyInput.value.trim();
+    const ollamaUrl = ollamaUrlInput.value.trim();
     
-    if (!apiKey) {
-      showStatus('Please enter an API key first', 'warning');
-      apiKeyInput.focus();
-      return;
+    // Validate based on provider
+    if (provider === 'groq' || provider === 'gemini') {
+      if (!apiKey) {
+        showStatus(`Please enter ${provider === 'groq' ? 'Groq' : 'Google'} API key first`, 'warning');
+        apiKeyInput.focus();
+        return;
+      }
     }
     
-    if (!validateApiKeyFormat(apiKey)) {
-      showStatus('Invalid API key format', 'error');
+    if (provider === 'ollama' && !ollamaUrl) {
+      showStatus('Please enter Ollama server URL first', 'warning');
+      ollamaUrlInput.focus();
       return;
     }
     
@@ -113,7 +192,13 @@ document.addEventListener('DOMContentLoaded', function() {
     hideStatus();
     
     try {
-      const result = await testAPIConnection(apiKey);
+      const config = {
+        provider: provider,
+        apiKey: apiKey,
+        ollamaUrl: ollamaUrl
+      };
+      
+      const result = await testAPIConnection(config);
       
       if (result.success) {
         showStatus(result.message, 'success');
@@ -143,13 +228,16 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   /**
-   * Clear saved API key
+   * Clear saved settings
    */
-  async function clearApiKey() {
+  async function clearSettings() {
     try {
-      await chrome.storage.sync.remove(['google_api_key']);
+      await chrome.storage.sync.remove(['ai_provider', 'api_key', 'ollama_url']);
+      aiProviderSelect.value = 'huggingface';
       apiKeyInput.value = '';
-      showStatus('API key cleared', 'warning');
+      ollamaUrlInput.value = 'http://localhost:11434';
+      updateProviderUI();
+      showStatus('Settings cleared', 'warning');
       
       // Change clear button to indicate action
       const originalText = clearBtn.textContent;
@@ -160,9 +248,41 @@ document.addEventListener('DOMContentLoaded', function() {
       }, 2000);
       
     } catch (error) {
-      console.error('Error clearing API key:', error);
-      showStatus('Error clearing API key', 'error');
+      console.error('Error clearing settings:', error);
+      showStatus('Error clearing settings', 'error');
     }
+  }
+  
+  /**
+   * Test AI provider connection using AIUtils
+   */
+  async function testAPIConnection(config) {
+    try {
+      // Load AIUtils if not already loaded
+      if (typeof window.AIUtils === 'undefined') {
+        await loadScript('utils/ai.js');
+      }
+      
+      return await window.AIUtils.testAPIConnection(config);
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to load AI utilities: ${error.message}`
+      };
+    }
+  }
+  
+  /**
+   * Load external script
+   */
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = chrome.runtime.getURL(src);
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
   }
   
   /**
