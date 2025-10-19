@@ -167,12 +167,14 @@ async function handleAreaCapture(coordinates, tabId) {
 }
 
 /**
- * Process OCR using Hugging Face (simplified)
+ * Process OCR using Hugging Face with fallback
  */
 async function processOCRAuto(imageDataUrl) {
-  console.log('Starting Hugging Face OCR processing...');
+  console.log('Starting OCR processing...');
   
+  // Try Hugging Face OCR first
   try {
+    console.log('Trying Hugging Face OCR...');
     const result = await tryHuggingFaceOCR(imageDataUrl);
     if (result.success) {
       console.log('Hugging Face OCR succeeded!');
@@ -181,10 +183,23 @@ async function processOCRAuto(imageDataUrl) {
     throw new Error(result.error);
   } catch (error) {
     console.log('Hugging Face OCR failed:', error.message);
-    return { 
-      success: false, 
-      error: 'OCR processing failed. Please try again or use manual text input.' 
-    };
+    
+    // Fallback to OCR.space
+    try {
+      console.log('Trying OCR.space fallback...');
+      const result = await tryOCRSpaceFallback(imageDataUrl);
+      if (result.success) {
+        console.log('OCR.space fallback succeeded!');
+        return result;
+      }
+      throw new Error(result.error);
+    } catch (fallbackError) {
+      console.log('OCR.space fallback failed:', fallbackError.message);
+      return { 
+        success: false, 
+        error: 'OCR processing failed. Please try again or use manual text input.' 
+      };
+    }
   }
 }
 
@@ -195,36 +210,89 @@ async function processOCRAuto(imageDataUrl) {
 async function tryHuggingFaceOCR(imageDataUrl) {
   const base64Image = imageDataUrl.split(',')[1];
   
-  const response = await Promise.race([
-    fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer hf_demo', // Demo token
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        inputs: base64Image
-      })
-    }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
-  ]);
-  
-  if (!response.ok) {
-    throw new Error(`Hugging Face OCR error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  
-  if (data && data.length > 0 && data[0].generated_text) {
-    const extractedText = data[0].generated_text.trim();
-    if (extractedText && extractedText.length >= 2) {
-      return { success: true, extractedText };
+  try {
+    const response = await Promise.race([
+      fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+          // No Authorization header - using public access
+        },
+        body: JSON.stringify({
+          inputs: base64Image
+        })
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+    ]);
+    
+    if (!response.ok) {
+      if (response.status === 503) {
+        throw new Error('Hugging Face model is loading, please wait and try again');
+      }
+      if (response.status === 429) {
+        throw new Error('Hugging Face rate limit exceeded, please try again later');
+      }
+      throw new Error(`Hugging Face OCR error: ${response.status} ${response.statusText}`);
     }
+    
+    const data = await response.json();
+    
+    if (data && data.length > 0 && data[0].generated_text) {
+      const extractedText = data[0].generated_text.trim();
+      if (extractedText && extractedText.length >= 2) {
+        return { success: true, extractedText };
+      }
+    }
+    
+    throw new Error('No text detected by Hugging Face OCR');
+    
+  } catch (error) {
+    console.error('Hugging Face OCR Error:', error);
+    throw error;
   }
-  
-  throw new Error('No text detected by Hugging Face OCR');
 }
 
+/**
+ * Try OCR.space as fallback (free tier)
+ */
+async function tryOCRSpaceFallback(imageDataUrl) {
+  const base64Image = imageDataUrl.split(',')[1];
+  
+  try {
+    const formData = new FormData();
+    formData.append('base64Image', `data:image/png;base64,${base64Image}`);
+    formData.append('language', 'eng');
+    formData.append('isOverlayRequired', 'false');
+    formData.append('OCREngine', '2');
+    
+    const response = await Promise.race([
+      fetch('https://api.ocr.space/parse/image', {
+        method: 'POST',
+        body: formData
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+    ]);
+    
+    if (!response.ok) {
+      throw new Error(`OCR.space error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.OCRExitCode === 1 && data.ParsedResults && data.ParsedResults[0]) {
+      const extractedText = data.ParsedResults[0].ParsedText.trim();
+      if (extractedText && extractedText.length >= 2) {
+        return { success: true, extractedText };
+      }
+    }
+    
+    throw new Error('No text detected by OCR.space');
+    
+  } catch (error) {
+    console.error('OCR.space Fallback Error:', error);
+    throw error;
+  }
+}
 
 /**
  * Crop image based on selection coordinates using OffscreenCanvas
