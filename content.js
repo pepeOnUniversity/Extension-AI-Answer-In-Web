@@ -513,80 +513,30 @@ function showAIResult(extractedText, aiResponse, coordinates, processingTime = '
 }
 
 /**
- * Process OCR using multiple free services with fallback
+ * Process OCR using Hugging Face OCR only
  */
 async function processOCR(imageDataUrl) {
-  console.log('Starting free OCR processing with fallback services...');
+  console.log('Starting Hugging Face OCR processing...');
   
-  // Try OCR services first (but don't let them block manual input)
-  const ocrServices = [
-    () => tryOCRSpace(imageDataUrl),
-    () => tryImageToText(imageDataUrl)
-  ];
-  
-  // Try automatic OCR services with shorter timeouts
-  for (let i = 0; i < ocrServices.length; i++) {
-    try {
-      console.log(`Trying OCR service ${i + 1}...`);
-      const result = await Promise.race([
-        ocrServices[i](),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Service timeout')), 8000))
-      ]);
-      
-      if (result.success) {
-        return result;
-      }
-      console.log(`Service ${i + 1} failed:`, result.error);
-    } catch (error) {
-      console.log(`Service ${i + 1} error:`, error.message);
+  try {
+    const result = await tryHuggingFaceOCR(imageDataUrl);
+    if (result.success) {
+      return result;
     }
+    console.log('Hugging Face OCR failed:', result.error);
+  } catch (error) {
+    console.log('Hugging Face OCR error:', error.message);
   }
   
-  // All automatic services failed - show manual input
-  console.log('All OCR services failed, showing manual input...');
+  // If Hugging Face OCR fails - show manual input
+  console.log('Hugging Face OCR failed, showing manual input...');
   return await tryManualInput(imageDataUrl);
 }
 
 /**
- * Try OCR.space API
+ * Try Hugging Face OCR API
  */
-async function tryOCRSpace(imageDataUrl) {
-  const base64Image = imageDataUrl.split(',')[1];
-  
-  const formData = new FormData();
-  formData.append('base64Image', `data:image/png;base64,${base64Image}`);
-  formData.append('language', 'eng');
-  formData.append('isOverlayRequired', 'false');
-  formData.append('OCREngine', '2');
-  
-  const response = await Promise.race([
-    fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      body: formData
-    }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-  ]);
-  
-  if (!response.ok) {
-    throw new Error(`OCR.space error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  
-  if (data.OCRExitCode === 1 && data.ParsedResults && data.ParsedResults[0]) {
-    const extractedText = data.ParsedResults[0].ParsedText.trim();
-    if (extractedText && extractedText.length >= 2) {
-      return { success: true, extractedText };
-    }
-  }
-  
-  throw new Error('No text detected by OCR.space');
-}
-
-/**
- * Try image-to-text.p.rapidapi.com (free tier)
- */
-async function tryImageToText(imageDataUrl) {
+async function tryHuggingFaceOCR(imageDataUrl) {
   const base64Image = imageDataUrl.split(',')[1];
   
   // Convert base64 to blob for the API
@@ -602,28 +552,27 @@ async function tryImageToText(imageDataUrl) {
   formData.append('image', blob, 'image.png');
   
   const response = await Promise.race([
-    fetch('https://image-to-text.p.rapidapi.com/', {
+    fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
       method: 'POST',
-      headers: {
-        'X-RapidAPI-Key': 'demo', // Use demo key for testing
-        'X-RapidAPI-Host': 'image-to-text.p.rapidapi.com'
-      },
       body: formData
     }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000))
   ]);
   
   if (!response.ok) {
-    throw new Error(`ImageToText error: ${response.status}`);
+    throw new Error(`Hugging Face OCR error: ${response.status}`);
   }
   
   const data = await response.json();
   
-  if (data.text && data.text.trim().length >= 2) {
-    return { success: true, extractedText: data.text.trim() };
+  if (data && data.length > 0 && data[0].generated_text) {
+    const extractedText = data[0].generated_text.trim();
+    if (extractedText && extractedText.length >= 2) {
+      return { success: true, extractedText };
+    }
   }
   
-  throw new Error('No text detected by ImageToText');
+  throw new Error('No text detected by Hugging Face OCR');
 }
 
 /**

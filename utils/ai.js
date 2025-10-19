@@ -2,7 +2,7 @@
 // Handles multiple free AI providers integration
 
 /**
- * Get AI response from various free providers
+ * Get AI response from Hugging Face
  * @param {string} extractedText - Text extracted from OCR
  * @param {Object} config - Configuration object
  * @returns {Promise<string>} - AI response
@@ -12,10 +12,10 @@ async function getAIResponse(extractedText, config = {}) {
     throw new Error('Invalid text provided for AI processing');
   }
   
-  // Default configuration
+  // Default configuration for Hugging Face
   const options = {
-    provider: config.provider || 'huggingface', // huggingface, groq, ollama
-    model: config.model || getDefaultModel(config.provider),
+    provider: 'huggingface',
+    model: config.model || 'microsoft/DialoGPT-medium',
     maxTokens: config.maxTokens || 500,
     temperature: config.temperature || 0.7,
     systemPrompt: config.systemPrompt || getDefaultSystemPrompt(),
@@ -25,23 +25,7 @@ async function getAIResponse(extractedText, config = {}) {
   };
   
   try {
-    let response;
-    switch (options.provider.toLowerCase()) {
-      case 'huggingface':
-        response = await makeHuggingFaceRequest(extractedText, options);
-        break;
-      case 'groq':
-        response = await makeGroqRequest(extractedText, options);
-        break;
-      case 'ollama':
-        response = await makeOllamaRequest(extractedText, options);
-        break;
-      case 'gemini':
-        response = await makeGeminiRequest(options.apiKey, options);
-        break;
-      default:
-        throw new Error(`Unsupported provider: ${options.provider}`);
-    }
+    const response = await makeHuggingFaceRequest(extractedText, options);
     return response;
   } catch (error) {
     console.error('AI Response Error:', error);
@@ -50,42 +34,12 @@ async function getAIResponse(extractedText, config = {}) {
 }
 
 /**
- * Get default model for each provider
+ * Get default model for Hugging Face
  */
 function getDefaultModel(provider) {
-  const models = {
-    'huggingface': 'microsoft/DialoGPT-medium',
-    'groq': 'llama3-8b-8192',
-    'ollama': 'llama3',
-    'gemini': 'gemini-pro'
-  };
-  return models[provider] || models['huggingface'];
+  return 'microsoft/DialoGPT-medium';
 }
 
-/**
- * Get the best available model for the API key
- */
-async function getBestAvailableModel(apiKey) {
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-    if (!response.ok) return 'gemini-pro'; // fallback
-    
-    const data = await response.json();
-    const models = data.models || [];
-    
-    // Prefer gemini models that support generateContent
-    const suitableModel = models.find(model => 
-      model.supportedGenerationMethods?.includes('generateContent') &&
-      model.name.includes('gemini')
-    ) || models.find(model => 
-      model.supportedGenerationMethods?.includes('generateContent')
-    );
-    
-    return suitableModel ? suitableModel.name : 'gemini-pro';
-  } catch (error) {
-    return 'gemini-pro'; // fallback
-  }
-}
 
 /**
  * Make request to Hugging Face Inference API (FREE)
@@ -131,153 +85,6 @@ async function makeHuggingFaceRequest(extractedText, config) {
   }
 }
 
-/**
- * Make request to Groq API (FREE tier available)
- * @param {string} extractedText - Text to process
- * @param {Object} config - Configuration object
- * @returns {Promise<string>} - AI response content
- */
-async function makeGroqRequest(extractedText, config) {
-  if (!config.apiKey) {
-    throw new Error('Groq API key is required. Get free API key at https://console.groq.com/');
-  }
-  
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`
-    },
-    body: JSON.stringify({
-      model: config.model || 'llama3-8b-8192',
-      messages: [
-        { role: 'system', content: config.systemPrompt },
-        { role: 'user', content: `${config.userPrompt}\n\nExtracted text: "${extractedText}"` }
-      ],
-      max_tokens: config.maxTokens || 500,
-      temperature: config.temperature || 0.7
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Groq API error: ${response.status} ${response.statusText}`);
-  }
-  
-  const data = await response.json();
-  
-  if (data.choices && data.choices[0] && data.choices[0].message) {
-    return data.choices[0].message.content.trim();
-  } else {
-    throw new Error('Unexpected response format from Groq API');
-  }
-}
-
-/**
- * Make request to Ollama (Local AI - 100% FREE)
- * @param {string} extractedText - Text to process
- * @param {Object} config - Configuration object
- * @returns {Promise<string>} - AI response content
- */
-async function makeOllamaRequest(extractedText, config) {
-  const ollamaUrl = config.ollamaUrl || 'http://localhost:11434';
-  const model = config.model || 'llama3';
-  
-  const response = await fetch(`${ollamaUrl}/api/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: model,
-      prompt: `${config.systemPrompt}\n\nUser: ${extractedText}\nAssistant:`,
-      stream: false,
-      options: {
-        temperature: config.temperature || 0.7,
-        num_predict: config.maxTokens || 500
-      }
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Ollama error: ${response.status} ${response.statusText}. Make sure Ollama is running locally.`);
-  }
-  
-  const data = await response.json();
-  
-  if (data.response) {
-    return data.response.trim();
-  } else {
-    throw new Error('Unexpected response format from Ollama');
-  }
-}
-
-/**
- * Make request to Google Gemini API
- * @param {string} apiKey - Google API key
- * @param {Object} config - Configuration object
- * @returns {Promise<string>} - AI response content
- */
-async function makeGeminiRequest(apiKey, config, retryCount = 0) {
-  // Auto-discover best model if using default
-  let modelName = config.model;
-  if (config.model === 'gemini-pro') {
-    modelName = await getBestAvailableModel(apiKey);
-  }
-  
-  const requestBody = {
-    contents: [{
-      parts: [{
-        text: `${config.systemPrompt}\n\n${config.userPrompt}`
-      }]
-    }],
-    generationConfig: {
-      temperature: config.temperature,
-      topK: 40,
-      topP: 0.95,
-      maxOutputTokens: config.maxTokens,
-    }
-  };
-  
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/${modelName}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'AI-Answer-Assistant/1.0'
-    },
-    body: JSON.stringify(requestBody)
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
-    
-    // Handle specific error types
-    if (response.status === 401) {
-      throw new Error('Invalid API key. Please check your Google API key.');
-    } else if (response.status === 429) {
-      // Rate limit - retry with exponential backoff
-      if (retryCount < 3) {
-        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-        console.log(`Rate limited. Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return makeGeminiRequest(apiKey, config, retryCount + 1);
-      }
-      throw new Error('Rate limit exceeded. Please wait a few minutes and try again.');
-    } else if (response.status === 403) {
-      throw new Error('Access denied. Please check your API key permissions.');
-    } else {
-      throw new Error(errorMessage);
-    }
-  }
-  
-  const data = await response.json();
-  
-  if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-    throw new Error('Invalid response format from Gemini API');
-  }
-  
-  return data.candidates[0].content.parts[0].text.trim();
-}
 
 /**
  * Get default system prompt for AI optimized for questions
@@ -325,80 +132,26 @@ Answer the question thoroughly and helpfully.`;
 }
 
 /**
- * Test AI provider connection
- * @param {Object} config - Configuration object with provider and credentials
+ * Test Hugging Face connection
+ * @param {Object} config - Configuration object with credentials
  * @returns {Promise<Object>} - Test result with success status and message
  */
 async function testAPIConnection(config) {
-  const { provider = 'huggingface', apiKey = '', model, ollamaUrl } = config;
+  const { apiKey = '', model } = config;
   
   try {
-    let testResponse;
     const testText = 'Test connection';
-    
-    switch (provider.toLowerCase()) {
-      case 'huggingface':
-        testResponse = await makeHuggingFaceRequest(testText, {
-          model: model || 'microsoft/DialoGPT-medium',
-          systemPrompt: 'You are a helpful assistant.',
-          maxTokens: 20,
-          temperature: 0,
-          apiKey
-        });
-        break;
-        
-      case 'groq':
-        if (!apiKey) {
-          return {
-            success: false,
-            message: 'Groq API key is required. Get free API key at https://console.groq.com/'
-          };
-        }
-        testResponse = await makeGroqRequest(testText, {
-          model: model || 'llama3-8b-8192',
-          systemPrompt: 'You are a helpful assistant.',
-          maxTokens: 20,
-          temperature: 0,
-          apiKey
-        });
-        break;
-        
-      case 'ollama':
-        testResponse = await makeOllamaRequest(testText, {
-          model: model || 'llama3',
-          systemPrompt: 'You are a helpful assistant.',
-          maxTokens: 20,
-          temperature: 0,
-          ollamaUrl
-        });
-        break;
-        
-      case 'gemini':
-        if (!apiKey) {
-          return {
-            success: false,
-            message: 'Google API key is required'
-          };
-        }
-        testResponse = await makeGeminiRequest(apiKey, {
-          model: model || 'gemini-pro',
-          systemPrompt: 'You are a helpful assistant.',
-          userPrompt: 'Please respond with exactly: "Connection successful"',
-          maxTokens: 10,
-          temperature: 0
-        });
-        break;
-        
-      default:
-        return {
-          success: false,
-          message: `Unsupported provider: ${provider}`
-        };
-    }
+    const testResponse = await makeHuggingFaceRequest(testText, {
+      model: model || 'microsoft/DialoGPT-medium',
+      systemPrompt: 'You are a helpful assistant.',
+      maxTokens: 20,
+      temperature: 0,
+      apiKey
+    });
     
     return {
       success: true,
-      message: `${provider.charAt(0).toUpperCase() + provider.slice(1)} API connection successful!`
+      message: 'Hugging Face API connection successful!'
     };
     
   } catch (error) {
@@ -496,9 +249,6 @@ if (typeof module !== 'undefined' && module.exports) {
     generateContextPrompts,
     validateAndCleanText,
     makeHuggingFaceRequest,
-    makeGroqRequest,
-    makeOllamaRequest,
-    makeGeminiRequest,
     getDefaultSystemPrompt,
     getDefaultUserPrompt,
     getDefaultModel
@@ -511,9 +261,6 @@ if (typeof module !== 'undefined' && module.exports) {
     generateContextPrompts,
     validateAndCleanText,
     makeHuggingFaceRequest,
-    makeGroqRequest,
-    makeOllamaRequest,
-    makeGeminiRequest,
     getDefaultSystemPrompt,
     getDefaultUserPrompt,
     getDefaultModel

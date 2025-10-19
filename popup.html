@@ -254,39 +254,16 @@
     <!-- Status Message -->
     <div id="status" class="status hidden"></div>
     
-    <!-- AI Provider Selection -->
+    <!-- Hugging Face Configuration -->
     <div class="form-group">
-      <label for="aiProvider">🤖 AI Provider:</label>
-      <select id="aiProvider" class="form-select">
-        <option value="huggingface">🆓 Hugging Face (100% Free)</option>
-        <option value="groq">⚡ Groq (Free Tier)</option>
-        <option value="ollama">🏠 Ollama (Local - 100% Free)</option>
-        <option value="gemini">🔍 Google Gemini (Paid)</option>
-      </select>
-    </div>
-    
-    <!-- API Key Configuration -->
-    <div class="form-group" id="apiKeyGroup">
-      <label for="apiKey" id="apiKeyLabel">API Key:</label>
+      <label for="apiKey">🤗 Hugging Face Token (Optional):</label>
       <input 
         type="password" 
         id="apiKey" 
-        placeholder="Enter your API key..." 
+        placeholder="hf_... (optional for better rate limits)" 
         autocomplete="off"
       >
-      <div id="apiKeyHelp" class="api-key-help"></div>
-    </div>
-    
-    <!-- Ollama URL Configuration -->
-    <div class="form-group hidden" id="ollamaUrlGroup">
-      <label for="ollamaUrl">🏠 Ollama Server URL:</label>
-      <input 
-        type="text" 
-        id="ollamaUrl" 
-        placeholder="http://localhost:11434" 
-        value="http://localhost:11434"
-      >
-      <div class="api-key-help">Make sure Ollama is running locally</div>
+      <div class="api-key-help">🆓 <strong>100% Free!</strong> No API key required, but having one gives better rate limits.</div>
     </div>
     
     <!-- Button Group -->
@@ -307,12 +284,10 @@
       <h3>📋 How to Use:</h3>
       <ul>
         <li><strong>🤗 Hugging Face OCR</strong>: 100% Free, no API key needed!</li>
-        <li><strong>⚡ Groq</strong>: Free tier available, get API key at groq.com</li>
-        <li><strong>🏠 Ollama</strong>: Run AI locally, install Ollama first</li>
-        <li><strong>🔍 Google Gemini</strong>: Paid service, requires API key</li>
+        <li><strong>🤗 Hugging Face AI</strong>: 100% Free AI responses!</li>
         <li>Press <strong>Ctrl+Shift+Q</strong> to activate selection mode</li>
         <li>Drag to select any area with text/questions</li>
-        <li>✨ <strong>Hugging Face OCR</strong> + AI answers!</li>
+        <li>✨ <strong>100% Free</strong> OCR + AI answers!</li>
       </ul>
     </div>
     

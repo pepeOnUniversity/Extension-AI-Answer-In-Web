@@ -279,34 +279,27 @@ async function cropImage(dataUrl, coordinates) {
 
 
 /**
- * Get AI response using OpenAI API
+ * Get AI response using Hugging Face
  */
 async function getAIResponse(text) {
   try {
     // Get settings from storage
-    const result = await chrome.storage.sync.get([
-      'ai_provider', 
-      'api_key', 
-      'ollama_url'
-    ]);
+    const result = await chrome.storage.sync.get(['api_key']);
     
-    const provider = result.ai_provider || 'huggingface';
     const apiKey = result.api_key || '';
-    const ollamaUrl = result.ollama_url || 'http://localhost:11434';
     
     // Load AIUtils
     const aiUtils = await loadAIUtils();
     
-    // Configure AI request
+    // Configure AI request for Hugging Face
     const config = {
-      provider: provider,
+      provider: 'huggingface',
       apiKey: apiKey,
-      ollamaUrl: ollamaUrl,
       maxTokens: 500,
       temperature: 0.7
     };
     
-    // Get AI response using the new multi-provider system
+    // Get AI response using Hugging Face
     const aiResponse = await aiUtils.getAIResponse(text, config);
     return aiResponse;
     
