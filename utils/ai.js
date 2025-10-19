@@ -51,12 +51,19 @@ async function makeHuggingFaceRequest(extractedText, config) {
   const model = config.model || 'microsoft/DialoGPT-medium';
   const prompt = `${config.systemPrompt}\n\nUser: ${extractedText}\nAssistant:`;
   
+  // Prepare headers
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+  
+  // Only add Authorization header if API key is provided
+  if (config.apiKey) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  }
+  
   const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': config.apiKey ? `Bearer ${config.apiKey}` : undefined
-    },
+    headers: headers,
     body: JSON.stringify({
       inputs: prompt,
       parameters: {
@@ -68,10 +75,15 @@ async function makeHuggingFaceRequest(extractedText, config) {
   });
   
   if (!response.ok) {
-    if (response.status === 503) {
+    if (response.status === 401) {
+      throw new Error('Hugging Face API authentication failed. Please check your API key in the extension settings.');
+    } else if (response.status === 503) {
       throw new Error('Model is loading, please wait a moment and try again');
+    } else if (response.status === 429) {
+      throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+    } else {
+      throw new Error(`Hugging Face API error: ${response.status} ${response.statusText}`);
     }
-    throw new Error(`Hugging Face API error: ${response.status} ${response.statusText}`);
   }
   
   const data = await response.json();

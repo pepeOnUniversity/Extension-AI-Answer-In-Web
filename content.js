@@ -551,16 +551,33 @@ async function tryHuggingFaceOCR(imageDataUrl) {
   const formData = new FormData();
   formData.append('image', blob, 'image.png');
   
+  // Get API key from storage
+  const result = await chrome.storage.sync.get(['api_key']);
+  const apiKey = result.api_key || '';
+  
+  // Prepare headers
+  const headers = {};
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+  
   const response = await Promise.race([
     fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
       method: 'POST',
+      headers: headers,
       body: formData
     }),
     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000))
   ]);
   
   if (!response.ok) {
-    throw new Error(`Hugging Face OCR error: ${response.status}`);
+    if (response.status === 401) {
+      throw new Error(`Hugging Face OCR authentication failed. Please check your API key in the extension settings.`);
+    } else if (response.status === 503) {
+      throw new Error(`Hugging Face OCR model is loading, please wait a moment and try again`);
+    } else {
+      throw new Error(`Hugging Face OCR error: ${response.status} ${response.statusText}`);
+    }
   }
   
   const data = await response.json();
