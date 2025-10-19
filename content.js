@@ -206,6 +206,9 @@ function handleMouseUp(event) {
   // Show loading indicator
   showLoadingIndicator();
   
+  // Record start time for processing duration
+  const startTime = Date.now();
+  
   // Send coordinates to background script
   try {
     chrome.runtime.sendMessage({
@@ -214,6 +217,9 @@ function handleMouseUp(event) {
     }, (response) => {
       hideLoadingIndicator();
       
+      // Calculate processing time
+      const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      
       // Check for extension context invalidation
       if (chrome.runtime.lastError) {
         showError('Extension context invalidated. Please reload the extension and refresh this page.');
@@ -221,7 +227,7 @@ function handleMouseUp(event) {
       }
       
       if (response && response.success) {
-        showAIResult(response.extractedText, response.aiResponse, currentSelection);
+        showAIResult(response.extractedText, response.aiResponse, currentSelection, processingTime);
       } else {
         showError(response?.error || 'Failed to process selection');
       }
@@ -338,7 +344,7 @@ function hideLoadingIndicator() {
 /**
  * Show AI result in a beautiful popup
  */
-function showAIResult(extractedText, aiResponse, coordinates) {
+function showAIResult(extractedText, aiResponse, coordinates, processingTime = '0.0') {
   // Remove any existing result box
   const existing = document.getElementById('ai-result-box');
   if (existing) existing.remove();
@@ -387,7 +393,10 @@ function showAIResult(extractedText, aiResponse, coordinates) {
   `;
   header.innerHTML = `
     <div style="font-weight: 600; font-size: 16px;">🤖 AI Answer</div>
-    <button id="ai-close-btn" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s;">×</button>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 12px; opacity: 0.8;">⚡ ${processingTime}s</span>
+      <button id="ai-close-btn" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s;">×</button>
+    </div>
   `;
   
   // Content area
@@ -408,7 +417,10 @@ function showAIResult(extractedText, aiResponse, coordinates) {
     border-left: 4px solid #667eea;
   `;
   extractedSection.innerHTML = `
-    <div style="font-weight: 600; font-size: 14px; color: #495057; margin-bottom: 8px;">📝 Extracted Text:</div>
+    <div style="font-weight: 600; font-size: 14px; color: #495057; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+      <span>📝 Extracted Text:</span>
+      <button id="copy-extracted-text" style="background: #667eea; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">📋 Copy</button>
+    </div>
     <div style="font-size: 13px; color: #6c757d; line-height: 1.4; font-family: monospace;">${extractedText}</div>
   `;
   
@@ -421,7 +433,10 @@ function showAIResult(extractedText, aiResponse, coordinates) {
     border-left: 4px solid #28a745;
   `;
   responseSection.innerHTML = `
-    <div style="font-weight: 600; font-size: 14px; color: #495057; margin-bottom: 8px;">💡 AI Response:</div>
+    <div style="font-weight: 600; font-size: 14px; color: #495057; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+      <span>💡 AI Response:</span>
+      <button id="copy-ai-response" style="background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">📋 Copy</button>
+    </div>
     <div style="font-size: 14px; color: #212529; line-height: 1.5;">${aiResponse}</div>
   `;
   
@@ -438,6 +453,46 @@ function showAIResult(extractedText, aiResponse, coordinates) {
   closeBtn.onclick = () => resultBox.remove();
   closeBtn.onmouseover = () => closeBtn.style.background = 'rgba(255, 255, 255, 0.2)';
   closeBtn.onmouseout = () => closeBtn.style.background = 'none';
+  
+  // Add copy functionality for AI response
+  const copyBtn = document.getElementById('copy-ai-response');
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(aiResponse);
+      copyBtn.textContent = '✅ Copied!';
+      copyBtn.style.background = '#28a745';
+      setTimeout(() => {
+        copyBtn.textContent = '📋 Copy';
+        copyBtn.style.background = '#28a745';
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      copyBtn.textContent = '❌ Failed';
+      setTimeout(() => {
+        copyBtn.textContent = '📋 Copy';
+      }, 2000);
+    }
+  };
+  
+  // Add copy functionality for extracted text
+  const copyExtractedBtn = document.getElementById('copy-extracted-text');
+  copyExtractedBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(extractedText);
+      copyExtractedBtn.textContent = '✅ Copied!';
+      copyExtractedBtn.style.background = '#667eea';
+      setTimeout(() => {
+        copyExtractedBtn.textContent = '📋 Copy';
+        copyExtractedBtn.style.background = '#667eea';
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      copyExtractedBtn.textContent = '❌ Failed';
+      setTimeout(() => {
+        copyExtractedBtn.textContent = '📋 Copy';
+      }, 2000);
+    }
+  };
   
   // Close on click outside
   setTimeout(() => {
