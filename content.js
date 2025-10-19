@@ -104,7 +104,7 @@ function showInstructions() {
     z-index: 1000000;
     animation: fadeIn 0.3s ease;
   `;
-  instructions.innerHTML = '🎯 Drag to select an area • Press ESC to cancel';
+  instructions.innerHTML = '🎯 Drag to select question → Auto OCR → Auto AI Answer • Press ESC to cancel';
   
   // Add fadeIn animation
   const style = document.createElement('style');
@@ -209,10 +209,10 @@ function handleMouseUp(event) {
   // Record start time for processing duration
   const startTime = Date.now();
   
-  // Send coordinates to background script
+  // Send coordinates to background script for auto OCR + AI processing
   try {
     chrome.runtime.sendMessage({
-      action: 'capture_area',
+      action: 'capture_area_auto_ai',
       coordinates: currentSelection
     }, (response) => {
       hideLoadingIndicator();
@@ -242,8 +242,8 @@ function handleMouseUp(event) {
   const loadingSteps = [
     '📸 Capturing area...',
     '✂️ Processing image...',
-    '👁️ Extracting text automatically...',
-    '🤖 Getting AI answer...'
+    '👁️ Auto-extracting text...',
+    '🤖 Auto-generating AI answer...'
   ];
   
   window.loadingUpdateInterval = setInterval(() => {
@@ -320,7 +320,7 @@ function showLoadingIndicator() {
   loading.innerHTML = `
     <div style="margin-bottom: 10px;">🤖 AI Answer Assistant</div>
     <div id="loading-status" style="font-size: 14px;">📸 Capturing area...</div>
-    <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 8px;">Auto-processing text and generating answer...</div>
+    <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 8px;">Auto OCR → Auto AI Answer (100% Free)</div>
   `;
   
   document.body.appendChild(loading);

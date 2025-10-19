@@ -12,6 +12,14 @@
     "clipboardWrite"
   ],
   
+  "host_permissions": [
+    "https://api.ocr.space/*",
+    "https://image-to-text.p.rapidapi.com/*",
+    "https://api-inference.huggingface.co/*",
+    "https://api.groq.com/*",
+    "http://localhost:11434/*"
+  ],
+  
   "background": {
     "service_worker": "background.js"
   },
