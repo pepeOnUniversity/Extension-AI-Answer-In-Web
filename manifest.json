@@ -13,11 +13,8 @@
   ],
   
   "host_permissions": [
-    "https://api.ocr.space/*",
-    "https://image-to-text.p.rapidapi.com/*",
     "https://api-inference.huggingface.co/*",
     "https://api.groq.com/*",
-    "https://vision.googleapis.com/*",
     "http://localhost:11434/*"
   ],
   
