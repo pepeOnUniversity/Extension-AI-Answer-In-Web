@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page for AI Answer Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .question {
+            background: #f0f8ff;
+            padding: 20px;
+            border-left: 4px solid #007bff;
+            margin: 20px 0;
+        }
+        .math-problem {
+            background: #fff3cd;
+            padding: 15px;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .code-example {
+            background: #f8f9fa;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Page for AI Answer Assistant Extension</h1>
+    
+    <div class="question">
+        <h2>Sample Question 1: Math Problem</h2>
+        <p>What is the derivative of f(x) = x² + 3x + 2?</p>
+        <p>Please solve this step by step.</p>
+    </div>
+    
+    <div class="math-problem">
+        <h3>Sample Question 2: Physics</h3>
+        <p>A ball is thrown vertically upward with an initial velocity of 20 m/s. How high will it go?</p>
+        <p>Use g = 9.8 m/s²</p>
+    </div>
+    
+    <div class="code-example">
+        <h3>Sample Question 3: Programming</h3>
+        <p>Write a Python function to find the factorial of a number using recursion.</p>
+        <pre>
+def factorial(n):
+    if n == 0 or n == 1:
+        return 1
+    else:
+        return n * factorial(n-1)
+        </pre>
+    </div>
+    
+    <div class="question">
+        <h2>Sample Question 4: Vietnamese Text</h2>
+        <p>Viết một đoạn văn ngắn về tầm quan trọng của việc học ngoại ngữ trong thời đại hiện tại.</p>
+        <p>Hãy bao gồm ít nhất 3 lý do chính.</p>
+    </div>
+    
+    <div class="math-problem">
+        <h3>Sample Question 5: Mixed Language</h3>
+        <p>Giải phương trình: 2x + 5 = 13</p>
+        <p>Solve for x and explain your steps.</p>
+    </div>
+    
+    <p><strong>Instructions:</strong></p>
+    <ol>
+        <li>Open the AI Answer Assistant extension</li>
+        <li>Enter your OpenAI API key</li>
+        <li>Click "Start Capture"</li>
+        <li>Drag to select any of the questions above</li>
+        <li>Check the browser console for debug messages</li>
+    </ol>
+    
+    <p><em>This page contains various types of text that can be used to test the OCR and AI processing capabilities of the extension.</em></p>
+</body>
+</html>

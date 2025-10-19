@@ -1,221 +1,142 @@
-// Popup script for AI Answer Assistant
-// Handles API key management and connection testing
-
 document.addEventListener('DOMContentLoaded', function() {
-  // DOM elements
-  const apiKeyInput = document.getElementById('apiKey');
-  const saveBtn = document.getElementById('saveBtn');
-  const testBtn = document.getElementById('testBtn');
-  const clearBtn = document.getElementById('clearBtn');
-  const statusDiv = document.getElementById('status');
-  const loadingDiv = document.getElementById('loading');
-  
-  // Load saved settings on startup
-  loadSavedSettings();
-  
-  // Event listeners
-  saveBtn.addEventListener('click', saveSettings);
-  testBtn.addEventListener('click', testConnection);
-  clearBtn.addEventListener('click', clearSettings);
-  apiKeyInput.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      saveSettings();
-    }
-  });
-  
-  
-  /**
-   * Load saved settings from chrome storage
-   */
-  async function loadSavedSettings() {
-    try {
-      const result = await chrome.storage.sync.get(['api_key']);
-      
-      if (result.api_key) {
-        apiKeyInput.value = result.api_key;
-        showStatus('Settings loaded', 'success');
-        setTimeout(() => hideStatus(), 2000);
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      showStatus('Error loading saved settings', 'error');
-    }
-  }
-  
-  
-  /**
-   * Save settings to chrome storage
-   */
-  async function saveSettings() {
-    const apiKey = apiKeyInput.value.trim();
+    console.log('Popup loaded');
     
-    try {
-      const settings = {
-        api_key: apiKey
-      };
-      
-      await chrome.storage.sync.set(settings);
-      showStatus('Settings saved successfully!', 'success');
-      
-      // Change save button to indicate success
-      const originalText = saveBtn.textContent;
-      saveBtn.textContent = '✓ Saved';
-      saveBtn.classList.remove('btn-primary');
-      saveBtn.classList.add('btn-success');
-      
-      setTimeout(() => {
-        saveBtn.textContent = originalText;
-        saveBtn.classList.remove('btn-success');
-        saveBtn.classList.add('btn-primary');
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      showStatus('Error saving settings', 'error');
-    }
-  }
-  
-  /**
-   * Test Hugging Face connection
-   */
-  async function testConnection() {
-    const apiKey = apiKeyInput.value.trim();
+    const openaiKeyInput = document.getElementById('openai-key');
+    const ocrLanguageSelect = document.getElementById('ocr-language');
+    const startCaptureBtn = document.getElementById('start-capture');
+    const saveSettingsBtn = document.getElementById('save-settings');
+    const statusDiv = document.getElementById('status');
+    const resultDiv = document.getElementById('result');
     
-    // Show loading state
-    showLoading(true);
-    hideStatus();
+    // Debug function
+    function debugPopupStatus() {
+        console.log('=== Popup Debug Info ===');
+        console.log('openaiKeyInput:', !!openaiKeyInput);
+        console.log('ocrLanguageSelect:', !!ocrLanguageSelect);
+        console.log('startCaptureBtn:', !!startCaptureBtn);
+        console.log('saveSettingsBtn:', !!saveSettingsBtn);
+        console.log('statusDiv:', !!statusDiv);
+        console.log('resultDiv:', !!resultDiv);
+        console.log('Chrome APIs available:', {
+            runtime: typeof chrome !== 'undefined' && typeof chrome.runtime !== 'undefined',
+            tabs: typeof chrome !== 'undefined' && typeof chrome.tabs !== 'undefined',
+            storage: typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined'
+        });
+        console.log('======================');
+    }
     
-    try {
-      const config = {
-        provider: 'huggingface',
-        apiKey: apiKey
-      };
-      
-      const result = await testAPIConnection(config);
-      
-      if (result.success) {
-        showStatus(result.message, 'success');
+    debugPopupStatus();
+
+    // Load saved settings
+    loadSettings();
+
+    // Save settings
+    saveSettingsBtn.addEventListener('click', function() {
+        const openaiKey = openaiKeyInput.value.trim();
+        const ocrLanguage = ocrLanguageSelect.value;
         
-        // Change test button to indicate success
-        const originalText = testBtn.textContent;
-        testBtn.textContent = '✓ Connected';
-        testBtn.classList.remove('btn-primary');
-        testBtn.classList.add('btn-success');
+        if (!openaiKey) {
+            showStatus('Vui lòng nhập OpenAI API key!', 'error');
+            return;
+        }
         
-        setTimeout(() => {
-          testBtn.textContent = originalText;
-          testBtn.classList.remove('btn-success');
-          testBtn.classList.add('btn-primary');
-        }, 3000);
-        
-      } else {
-        showStatus(`Connection failed: ${result.message}`, 'error');
-      }
-      
-    } catch (error) {
-      console.error('Connection test error:', error);
-      showStatus('Connection test failed', 'error');
-    } finally {
-      showLoading(false);
-    }
-  }
-  
-  /**
-   * Clear saved settings
-   */
-  async function clearSettings() {
-    try {
-      await chrome.storage.sync.remove(['api_key']);
-      apiKeyInput.value = '';
-      showStatus('Settings cleared', 'warning');
-      
-      // Change clear button to indicate action
-      const originalText = clearBtn.textContent;
-      clearBtn.textContent = '✓ Cleared';
-      
-      setTimeout(() => {
-        clearBtn.textContent = originalText;
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Error clearing settings:', error);
-      showStatus('Error clearing settings', 'error');
-    }
-  }
-  
-  /**
-   * Test AI provider connection using AIUtils
-   */
-  async function testAPIConnection(config) {
-    try {
-      // Load AIUtils if not already loaded
-      if (typeof window.AIUtils === 'undefined') {
-        await loadScript('utils/ai.js');
-      }
-      
-      return await window.AIUtils.testAPIConnection(config);
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to load AI utilities: ${error.message}`
-      };
-    }
-  }
-  
-  /**
-   * Load external script
-   */
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = chrome.runtime.getURL(src);
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
+        chrome.storage.sync.set({
+            openaiKey: openaiKey,
+            ocrLanguage: ocrLanguage
+        }, function() {
+            showStatus('Đã lưu cài đặt thành công!', 'success');
+        });
     });
-  }
-  
-  /**
-   * Show status message
-   */
-  function showStatus(message, type = 'success') {
-    statusDiv.textContent = message;
-    statusDiv.className = `status ${type} fade-in`;
-    statusDiv.classList.remove('hidden');
-    
-    // Auto-hide error and warning messages after 5 seconds
-    if (type === 'error' || type === 'warning') {
-      setTimeout(() => hideStatus(), 5000);
+
+    // Start capture
+    startCaptureBtn.addEventListener('click', function() {
+        console.log('Start capture button clicked');
+        
+        const openaiKey = openaiKeyInput.value.trim();
+        if (!openaiKey) {
+            showStatus('Vui lòng nhập OpenAI API key trước!', 'error');
+            return;
+        }
+
+        // Save key temporarily if not saved
+        chrome.storage.sync.set({ openaiKey: openaiKey });
+
+        showStatus('Đang khởi tạo chụp màn hình...', 'loading');
+        startCaptureBtn.disabled = true;
+
+        // Send message to content script to start capture
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            console.log('Active tab:', tabs[0]);
+            
+            if (!tabs[0]) {
+                showStatus('Không tìm thấy tab hiện tại', 'error');
+                startCaptureBtn.disabled = false;
+                return;
+            }
+            
+            chrome.tabs.sendMessage(tabs[0].id, {
+                action: 'startCapture'
+            }, function(response) {
+                console.log('Response from content script:', response);
+                
+                if (chrome.runtime.lastError) {
+                    console.error('Chrome runtime error:', chrome.runtime.lastError);
+                    showStatus('Lỗi: ' + chrome.runtime.lastError.message, 'error');
+                    startCaptureBtn.disabled = false;
+                } else if (response && response.success) {
+                    showStatus('Kéo thả để chọn vùng câu hỏi...', 'loading');
+                    // Keep button disabled until capture is complete
+                } else {
+                    showStatus('Không thể khởi tạo chụp màn hình', 'error');
+                    startCaptureBtn.disabled = false;
+                }
+            });
+        });
+    });
+
+    // Listen for messages from background script
+    chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+        if (request.action === 'captureComplete') {
+            startCaptureBtn.disabled = false;
+            if (request.success) {
+                showStatus('Đang xử lý ảnh và phân tích...', 'loading');
+            } else {
+                showStatus('Chụp màn hình thất bại: ' + request.error, 'error');
+            }
+        } else if (request.action === 'analysisComplete') {
+            startCaptureBtn.disabled = false;
+            if (request.success) {
+                showStatus('Phân tích hoàn tất!', 'success');
+                showResult(request.result);
+            } else {
+                showStatus('Lỗi phân tích: ' + request.error, 'error');
+            }
+        }
+    });
+
+    function loadSettings() {
+        chrome.storage.sync.get(['openaiKey', 'ocrLanguage'], function(result) {
+            if (result.openaiKey) {
+                openaiKeyInput.value = result.openaiKey;
+            }
+            if (result.ocrLanguage) {
+                ocrLanguageSelect.value = result.ocrLanguage;
+            }
+        });
     }
-  }
-  
-  /**
-   * Hide status message
-   */
-  function hideStatus() {
-    statusDiv.classList.add('hidden');
-  }
-  
-  /**
-   * Show/hide loading indicator
-   */
-  function showLoading(show) {
-    if (show) {
-      loadingDiv.style.display = 'block';
-      testBtn.disabled = true;
-    } else {
-      loadingDiv.style.display = 'none';
-      testBtn.disabled = false;
+
+    function showStatus(message, type) {
+        statusDiv.textContent = message;
+        statusDiv.className = `status ${type}`;
+        statusDiv.classList.remove('hidden');
     }
-  }
-  
-  /**
-   * Validate API key format
-   */
-  function validateApiKeyFormat(apiKey) {
-    // Google API keys start with 'AIzaSy' and are typically 39 characters long
-    return /^AIzaSy[A-Za-z0-9\-_]{33}$/.test(apiKey);
-  }
-  
-  
+
+    function showResult(result) {
+        resultDiv.textContent = result;
+        resultDiv.classList.remove('hidden');
+    }
+
+    function hideStatus() {
+        statusDiv.classList.add('hidden');
+    }
 });

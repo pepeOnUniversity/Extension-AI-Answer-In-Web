@@ -1,280 +1,174 @@
-// AI utility for AI Answer Assistant
-// Handles multiple free AI providers integration
-
-/**
- * Get AI response from Hugging Face
- * @param {string} extractedText - Text extracted from OCR
- * @param {Object} config - Configuration object
- * @returns {Promise<string>} - AI response
- */
-async function getAIResponse(extractedText, config = {}) {
-  if (!extractedText || typeof extractedText !== 'string') {
-    throw new Error('Invalid text provided for AI processing');
-  }
-  
-  // Default configuration for Hugging Face
-  const options = {
-    provider: 'huggingface',
-    model: config.model || 'microsoft/DialoGPT-medium',
-    maxTokens: config.maxTokens || 500,
-    temperature: config.temperature || 0.7,
-    systemPrompt: config.systemPrompt || getDefaultSystemPrompt(),
-    userPrompt: config.userPrompt || getDefaultUserPrompt(extractedText),
-    apiKey: config.apiKey || '',
-    ...config
-  };
-  
-  try {
-    const response = await makeHuggingFaceRequest(extractedText, options);
-    return response;
-  } catch (error) {
-    console.error('AI Response Error:', error);
-    throw new Error(`Failed to get AI response: ${error.message}`);
-  }
-}
-
-/**
- * Get default model for Hugging Face
- */
-function getDefaultModel(provider) {
-  return 'microsoft/DialoGPT-medium';
-}
-
-
-/**
- * Make request to Hugging Face Inference API (FREE)
- * @param {string} extractedText - Text to process
- * @param {Object} config - Configuration object
- * @returns {Promise<string>} - AI response content
- */
-async function makeHuggingFaceRequest(extractedText, config) {
-  const model = config.model || 'microsoft/DialoGPT-medium';
-  const prompt = `${config.systemPrompt}\n\nUser: ${extractedText}\nAssistant:`;
-  
-  // Prepare headers
-  const headers = {
-    'Content-Type': 'application/json'
-  };
-  
-  // Only add Authorization header if API key is provided
-  if (config.apiKey) {
-    headers['Authorization'] = `Bearer ${config.apiKey}`;
-  }
-  
-  const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-    method: 'POST',
-    headers: headers,
-    body: JSON.stringify({
-      inputs: prompt,
-      parameters: {
-        max_length: config.maxTokens || 500,
-        temperature: config.temperature || 0.7,
-        return_full_text: false
-      }
-    })
-  });
-  
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('Hugging Face API authentication failed. Please check your API key in the extension settings.');
-    } else if (response.status === 503) {
-      throw new Error('Model is loading, please wait a moment and try again');
-    } else if (response.status === 429) {
-      throw new Error('Rate limit exceeded. Please wait a moment and try again.');
-    } else {
-      throw new Error(`Hugging Face API error: ${response.status} ${response.statusText}`);
+// AI utility functions for the extension
+class AIHelper {
+    constructor() {
+        this.apiKey = null;
+        this.model = 'gpt-3.5-turbo';
     }
-  }
-  
-  const data = await response.json();
-  
-  if (Array.isArray(data) && data[0] && data[0].generated_text) {
-    return data[0].generated_text.trim();
-  } else if (data.error) {
-    throw new Error(`Hugging Face error: ${data.error}`);
-  } else {
-    throw new Error('Unexpected response format from Hugging Face');
-  }
+
+    async initialize() {
+        const result = await chrome.storage.sync.get(['openaiKey']);
+        this.apiKey = result.openaiKey;
+        return !!this.apiKey;
+    }
+
+    async analyzeQuestion(questionText, questionType = 'general') {
+        if (!this.apiKey) {
+            throw new Error('OpenAI API key chưa được cấu hình');
+        }
+
+        const prompt = this.buildPrompt(questionText, questionType);
+        
+        try {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: this.model,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: this.getSystemPrompt(questionType)
+                        },
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ],
+                    max_tokens: 1500,
+                    temperature: 0.3
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`OpenAI API Error: ${errorData.error?.message || 'Unknown error'}`);
+            }
+
+            const data = await response.json();
+            return data.choices[0].message.content;
+
+        } catch (error) {
+            console.error('AI Analysis Error:', error);
+            throw error;
+        }
+    }
+
+    buildPrompt(questionText, questionType) {
+        const basePrompt = `Hãy phân tích câu hỏi sau và đưa ra đáp án chính xác:
+
+Câu hỏi: ${questionText}
+
+Yêu cầu:`;
+
+        switch (questionType) {
+            case 'multiple_choice':
+                return basePrompt + `
+1. Đọc kỹ câu hỏi và các đáp án
+2. Phân tích từng đáp án một cách chi tiết
+3. Chọn đáp án đúng nhất và giải thích lý do
+4. Nếu có thể, cung cấp thêm thông tin bổ sung
+5. Trả lời bằng tiếng Việt, rõ ràng và dễ hiểu`;
+
+            case 'math':
+                return basePrompt + `
+1. Xác định loại bài toán (đại số, hình học, giải tích, v.v.)
+2. Trình bày các bước giải chi tiết
+3. Áp dụng công thức phù hợp
+4. Kiểm tra kết quả
+5. Trả lời bằng tiếng Việt với công thức rõ ràng`;
+
+            case 'essay':
+                return basePrompt + `
+1. Phân tích yêu cầu của câu hỏi
+2. Lập dàn ý chi tiết
+3. Trình bày luận điểm chính
+4. Cung cấp ví dụ minh họa
+5. Kết luận tổng hợp
+6. Trả lời bằng tiếng Việt, có cấu trúc rõ ràng`;
+
+            default:
+                return basePrompt + `
+1. Đọc kỹ câu hỏi và xác định chủ đề
+2. Cung cấp thông tin chính xác và đầy đủ
+3. Giải thích rõ ràng, dễ hiểu
+4. Cung cấp ví dụ minh họa nếu cần
+5. Trả lời bằng tiếng Việt`;
+
+        }
+    }
+
+    getSystemPrompt(questionType) {
+        const baseSystem = 'Bạn là một trợ lý AI chuyên giúp trả lời câu hỏi học thuật. Hãy trả lời chính xác, chi tiết và dễ hiểu.';
+
+        switch (questionType) {
+            case 'multiple_choice':
+                return baseSystem + ' Đặc biệt chú ý đến việc phân tích các lựa chọn và chọn đáp án đúng nhất.';
+            
+            case 'math':
+                return baseSystem + ' Trình bày các bước giải toán một cách chi tiết và rõ ràng.';
+            
+            case 'essay':
+                return baseSystem + ' Cấu trúc câu trả lời như một bài luận hoàn chỉnh.';
+            
+            default:
+                return baseSystem;
+        }
+    }
+
+    detectQuestionType(questionText) {
+        const text = questionText.toLowerCase();
+        
+        // Check for multiple choice indicators
+        if (text.includes('chọn') || text.includes('đáp án') || 
+            text.match(/[a-d]\)/) || text.match(/[1-4]\)/)) {
+            return 'multiple_choice';
+        }
+        
+        // Check for math indicators
+        if (text.includes('tính') || text.includes('giải') || 
+            text.match(/[+\-*/=]/) || text.includes('phương trình') ||
+            text.includes('công thức')) {
+            return 'math';
+        }
+        
+        // Check for essay indicators
+        if (text.includes('trình bày') || text.includes('phân tích') ||
+            text.includes('giải thích') || text.includes('so sánh') ||
+            text.includes('bình luận')) {
+            return 'essay';
+        }
+        
+        return 'general';
+    }
+
+    async processQuestion(questionText) {
+        try {
+            const questionType = this.detectQuestionType(questionText);
+            const answer = await this.analyzeQuestion(questionText, questionType);
+            
+            return {
+                success: true,
+                questionType: questionType,
+                answer: answer,
+                originalQuestion: questionText
+            };
+            
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                originalQuestion: questionText
+            };
+        }
+    }
 }
 
-
-/**
- * Get default system prompt for AI optimized for questions
- * @returns {string} - Default system prompt
- */
-function getDefaultSystemPrompt() {
-  return `You are an expert AI assistant specialized in answering questions extracted from images using OCR. Your primary goal is to provide accurate, helpful answers to questions.
-
-Key Instructions:
-1. ASSUME the extracted text contains a question or problem that needs solving
-2. If text quality is poor due to OCR errors, use context clues to understand the intended question
-3. Provide direct, complete answers with clear explanations
-4. For multiple choice questions, explain why the correct answer is right
-5. For math problems, show step-by-step solutions
-6. For academic questions, provide educational explanations
-7. If text is in Vietnamese, respond in Vietnamese; otherwise respond in English
-8. If the text seems incomplete, make reasonable assumptions and explain what you're assuming
-
-Answer Style:
-- Start directly with the answer
-- Then provide explanation if needed
-- Use bullet points or numbered steps for complex answers
-- Be thorough but concise
-- Focus on being helpful and educational`;
-}
-
-/**
- * Generate default user prompt optimized for questions
- * @param {string} extractedText - Text extracted from OCR
- * @returns {string} - Formatted user prompt
- */
-function getDefaultUserPrompt(extractedText) {
-  return `Please answer this question extracted from an image:
-
-"${extractedText}"
-
-Note: The text above was extracted using OCR, so there might be some recognition errors. Please:
-1. Interpret the question even if there are OCR mistakes
-2. Provide a complete, accurate answer
-3. Show your work for math problems
-4. Explain your reasoning for complex questions
-5. If it's multiple choice, explain why other options are incorrect
-
-Answer the question thoroughly and helpfully.`;
-}
-
-/**
- * Test Hugging Face connection
- * @param {Object} config - Configuration object with credentials
- * @returns {Promise<Object>} - Test result with success status and message
- */
-async function testAPIConnection(config) {
-  const { apiKey = '', model } = config;
-  
-  try {
-    const testText = 'Test connection';
-    const testResponse = await makeHuggingFaceRequest(testText, {
-      model: model || 'microsoft/DialoGPT-medium',
-      systemPrompt: 'You are a helpful assistant.',
-      maxTokens: 20,
-      temperature: 0,
-      apiKey
-    });
-    
-    return {
-      success: true,
-      message: 'Hugging Face API connection successful!'
-    };
-    
-  } catch (error) {
-    return {
-      success: false,
-      message: error.message
-    };
-  }
-}
-
-/**
- * Generate context-aware prompts based on text content
- * @param {string} extractedText - Extracted text to analyze
- * @returns {Object} - Context-aware prompts
- */
-function generateContextPrompts(extractedText) {
-  const text = extractedText.toLowerCase();
-  let context = 'general';
-  let systemPrompt = getDefaultSystemPrompt();
-  let userPrompt = getDefaultUserPrompt(extractedText);
-  
-  // Detect content type and adjust prompts accordingly
-  if (text.includes('?') || text.includes('what') || text.includes('how') || text.includes('why')) {
-    context = 'question';
-    systemPrompt = 'You are an expert assistant specializing in answering questions clearly and accurately. Provide direct, helpful answers.';
-    userPrompt = `Please answer this question based on the extracted text: "${extractedText}"`;
-  }
-  
-  else if (text.includes('=') || text.match(/\d+[\+\-\*\/]\d+/) || text.includes('solve') || text.includes('calculate')) {
-    context = 'math';
-    systemPrompt = 'You are a math tutor. Help solve mathematical problems step by step with clear explanations.';
-    userPrompt = `Please help solve this math problem: "${extractedText}"`;
-  }
-  
-  else if (text.includes('function') || text.includes('def ') || text.includes('class ') || text.includes('import ')) {
-    context = 'code';
-    systemPrompt = 'You are a programming assistant. Help explain, debug, or improve code with clear technical guidance.';
-    userPrompt = `Please analyze this code and provide helpful insights: "${extractedText}"`;
-  }
-  
-  else if (text.includes('error') || text.includes('exception') || text.includes('failed') || text.includes('bug')) {
-    context = 'error';
-    systemPrompt = 'You are a technical troubleshooting assistant. Help diagnose and solve technical problems.';
-    userPrompt = `Please help diagnose and solve this technical issue: "${extractedText}"`;
-  }
-  
-  else if (text.length > 200) {
-    context = 'document';
-    systemPrompt = 'You are a document analysis assistant. Summarize and extract key insights from longer texts.';
-    userPrompt = `Please summarize and provide key insights from this text: "${extractedText}"`;
-  }
-  
-  return {
-    context,
-    systemPrompt,
-    userPrompt
-  };
-}
-
-/**
- * Validate and clean extracted text before sending to AI
- * @param {string} text - Raw extracted text
- * @returns {string} - Cleaned and validated text
- */
-function validateAndCleanText(text) {
-  if (!text || typeof text !== 'string') {
-    throw new Error('Invalid text input');
-  }
-  
-  // Remove excessive whitespace and normalize
-  let cleanedText = text
-    .replace(/\s+/g, ' ')
-    .trim();
-  
-  // Check minimum length
-  if (cleanedText.length < 3) {
-    throw new Error('Text too short for meaningful AI analysis');
-  }
-  
-  // Check maximum length (to avoid API limits)
-  const maxLength = 2000;
-  if (cleanedText.length > maxLength) {
-    cleanedText = cleanedText.substring(0, maxLength) + '...';
-  }
-  
-  return cleanedText;
-}
-
-// Export functions for use in other scripts
+// Export for use in other scripts
 if (typeof module !== 'undefined' && module.exports) {
-  // Node.js environment
-  module.exports = {
-    getAIResponse,
-    testAPIConnection,
-    generateContextPrompts,
-    validateAndCleanText,
-    makeHuggingFaceRequest,
-    getDefaultSystemPrompt,
-    getDefaultUserPrompt,
-    getDefaultModel
-  };
+    module.exports = AIHelper;
 } else {
-  // Browser environment - attach to window object
-  window.AIUtils = {
-    getAIResponse,
-    testAPIConnection,
-    generateContextPrompts,
-    validateAndCleanText,
-    makeHuggingFaceRequest,
-    getDefaultSystemPrompt,
-    getDefaultUserPrompt,
-    getDefaultModel
-  };
+    window.AIHelper = AIHelper;
 }

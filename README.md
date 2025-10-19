@@ -1,141 +1,128 @@
-# 🤖 AI Answer Assistant - Chrome Extension
+# 🤖 AI Answer Assistant - Extension Trình Duyệt
 
-A powerful Chrome extension that captures screen areas, extracts text using OCR, and provides intelligent AI-powered answers instantly.
+Một extension Chrome/Firefox giúp chụp màn hình câu hỏi, chuyển đổi thành text bằng OCR, và sử dụng AI để đưa ra đáp án chính xác.
 
-## ✨ Features
+## ✨ Tính Năng
 
-- **🆓 100% Free** - No paid services required
-- **📸 Screen Capture** - Select any area on your screen
-- **👁️ Smart OCR** - Multiple free OCR services with fallback
-- **🤖 AI Answers** - Powered by Google Gemini AI
-- **⚡ Fast & Reliable** - Bulletproof fallback system
-- **🌍 Multi-language** - Supports English and Vietnamese
-- **🎯 Question-Focused** - Optimized for answering questions
+- 📸 **Chụp màn hình thông minh**: Kéo thả để chọn vùng câu hỏi
+- 🔤 **OCR tích hợp**: Chuyển đổi ảnh thành text tự động
+- 🤖 **AI phân tích**: Sử dụng OpenAI GPT để phân tích và trả lời câu hỏi
+- 🎯 **Hỗ trợ nhiều loại câu hỏi**: Trắc nghiệm, tự luận, toán học
+- 🌐 **Giao diện tiếng Việt**: Dễ sử dụng và thân thiện
 
-## 🚀 Quick Start
+## 🚀 Cài Đặt
 
-### Installation
-1. Download or clone this repository
-2. Open Chrome and go to `chrome://extensions`
-3. Enable "Developer mode" (toggle in top right)
-4. Click "Load unpacked" and select the extension folder
-5. Pin the extension to your toolbar
+### Bước 1: Tải Extension
+1. Tải toàn bộ thư mục extension về máy
+2. Mở Chrome/Edge và vào `chrome://extensions/`
+3. Bật "Developer mode" ở góc trên bên phải
+4. Nhấn "Load unpacked" và chọn thư mục extension
 
-### Setup
-1. **Get Google API Key** (Free):
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable "Generative Language API"
-   - Create an API key
-   
-2. **Configure Extension**:
-   - Click the extension icon
-   - Enter your Google API key
-   - Click "Test" to verify connection
+### Bước 2: Cấu Hình API
+1. Nhấn vào icon extension trên thanh công cụ
+2. Nhập OpenAI API key của bạn
+3. Nhấn "Lưu cài đặt"
 
-### Usage
-1. Press **Ctrl+Shift+Q** (or **Cmd+Shift+Q** on Mac)
-2. Drag to select any text area on screen
-3. Wait for automatic processing:
-   - 📸 Captures area
-   - 🔍 Extracts text (multiple OCR services)
-   - 🤖 Gets AI answer
-   - 💬 Shows result popup
+## 📖 Hướng Dẫn Sử Dụng
 
-## 🛠️ Technical Details
+### Cách Sử Dụng Cơ Bản
+1. **Mở extension**: Nhấn vào icon AI Answer Assistant trên thanh công cụ
+2. **Nhập API key**: Đảm bảo đã nhập OpenAI API key
+3. **Bắt đầu chụp**: Nhấn "Bắt đầu chụp màn hình"
+4. **Chọn vùng**: Kéo thả để chọn vùng chứa câu hỏi
+5. **Xem kết quả**: AI sẽ phân tích và đưa ra đáp án
 
-### Architecture
-- **Manifest V3** Chrome Extension
-- **Service Worker** background script
-- **Content Script** for UI and OCR processing
-- **Multiple OCR Services** with smart fallback
-- **Google Gemini API** for AI responses
+### Các Loại Câu Hỏi Được Hỗ Trợ
+- ✅ **Câu hỏi trắc nghiệm**: Phân tích các đáp án và chọn đáp án đúng
+- ✅ **Câu hỏi toán học**: Giải bài toán với các bước chi tiết
+- ✅ **Câu hỏi tự luận**: Trả lời câu hỏi mở với cấu trúc rõ ràng
+- ✅ **Câu hỏi tiếng Anh**: Hỗ trợ cả tiếng Anh và tiếng Việt
 
-### OCR Services (Free Tier)
-1. **OCR.space** - Primary OCR service
-2. **ImageToText API** - Secondary fallback
-3. **Manual Input** - Final fallback (always works)
+## ⚙️ Cấu Hình
 
-### Files Structure
+### API Keys Cần Thiết
+- **OpenAI API Key**: Để sử dụng AI phân tích câu hỏi
+- **OCR.space API Key**: Để chuyển đổi ảnh thành text (có sẵn key demo)
+
+### Cài Đặt Nâng Cao
+Bạn có thể chỉnh sửa file `background.js` để:
+- Thay đổi model AI (GPT-3.5, GPT-4)
+- Điều chỉnh độ chính xác OCR
+- Thêm ngôn ngữ OCR mới
+
+## 🔧 Cấu Trúc Dự Án
+
 ```
-ai-answer-extension/
-├── manifest.json          # Extension configuration
-├── background.js          # Service worker
-├── content.js            # Content script & OCR
-├── popup.html            # Settings popup
-├── popup.js              # Popup functionality
+Extension-Answer-AI/
+├── manifest.json          # Cấu hình extension
+├── popup.html             # Giao diện chính
+├── popup.js               # Logic giao diện
+├── content.js             # Script chụp màn hình
+├── background.js          # Xử lý OCR và AI
 ├── utils/
-│   ├── ocr.js           # OCR utilities
-│   └── ai.js            # AI/Gemini integration
-└── icon.png             # Extension icon
+│   └── ai.js             # Utilities AI
+├── icon.png              # Icon extension
+└── README.md             # Hướng dẫn này
 ```
 
-## 🔧 Configuration
+## 🛠️ Phát Triển
 
-### Required APIs
-- ✅ **Generative Language API** (Google Cloud) - Free tier: 1500 requests/day
-- ✅ **Free OCR Services** - No registration required
+### Yêu Cầu Hệ Thống
+- Chrome/Edge 88+ hoặc Firefox 78+
+- Node.js (để phát triển)
+- OpenAI API key
 
-### Keyboard Shortcuts
-- **Ctrl+Shift+Q** (Windows/Linux)
-- **Cmd+Shift+Q** (Mac)
+### Cài Đặt Dependencies
+```bash
+# Không cần cài đặt dependencies cho extension cơ bản
+# Chỉ cần có API keys
+```
 
-You can customize shortcuts at `chrome://extensions/shortcuts`
+### Chạy Extension
+1. Mở Chrome/Edge
+2. Vào `chrome://extensions/`
+3. Bật Developer mode
+4. Load unpacked extension
+5. Chọn thư mục dự án
 
-## 🎯 Use Cases
+## 🐛 Xử Lý Lỗi
 
-- **Students** - Answer homework questions from textbooks
-- **Researchers** - Get explanations of complex text
-- **Professionals** - Quick answers from documents/presentations
-- **General** - Understand any text content online
+### Lỗi Thường Gặp
+- **"Không thể đọc text từ ảnh"**: Thử chụp lại với ảnh rõ nét hơn
+- **"OpenAI API Error"**: Kiểm tra API key và tài khoản
+- **"Không thể khởi tạo chụp màn hình"**: Refresh trang và thử lại
 
-## 🔒 Privacy & Security
+### Debug
+1. Mở Developer Tools (F12)
+2. Vào tab Console
+3. Xem lỗi chi tiết
+4. Kiểm tra Network tab để xem API calls
 
-- **No data storage** - All processing is real-time
-- **Secure APIs** - Uses official Google Cloud services
-- **Local processing** - OCR and capture happen locally
-- **No tracking** - Extension doesn't collect user data
+## 📝 Ghi Chú
 
-## 🐛 Troubleshooting
+- Extension sử dụng OCR.space API miễn phí (có giới hạn)
+- OpenAI API có phí, vui lòng kiểm tra pricing
+- Dữ liệu được xử lý locally, không lưu trữ trên server
 
-### Common Issues
+## 🤝 Đóng Góp
 
-**"Extension context invalidated"**
-- Reload extension at `chrome://extensions`
-- Refresh the webpage
+Mọi đóng góp đều được chào đón! Hãy:
+1. Fork dự án
+2. Tạo feature branch
+3. Commit changes
+4. Push và tạo Pull Request
 
-**"OCR services unavailable"**
-- Manual input popup will appear automatically
-- Type the text and get AI answers
+## 📄 License
 
-**"Invalid API key"**
-- Check your Google API key
-- Ensure Generative Language API is enabled
+MIT License - Xem file LICENSE để biết thêm chi tiết.
 
-### Diagnostics
-Use the "Check APIs" button in the extension popup to test:
-- ✅ Free OCR Service status
-- ✅ Google Gemini API status
+## 📞 Hỗ Trợ
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📝 License
-
-MIT License - feel free to use and modify!
-
-## 🙏 Acknowledgments
-
-- **Google Gemini** for AI responses
-- **OCR.space** for free OCR services
-- **Chrome Extensions API** for the platform
+Nếu gặp vấn đề, vui lòng:
+1. Kiểm tra README này
+2. Xem Issues trên GitHub
+3. Tạo Issue mới nếu cần
 
 ---
 
-**Made with ❤️ for the open-source community**
-
-🌟 **If this extension helps you, please give it a star!** 🌟
+**Chúc bạn sử dụng extension hiệu quả! 🎉**

@@ -1,65 +1,48 @@
 {
   "manifest_version": 3,
   "name": "AI Answer Assistant",
-  "version": "1.0",
-  "description": "Select any area on screen, extract text with OCR, and get AI answers instantly",
-  
+  "version": "1.0.0",
+  "description": "Chụp màn hình câu hỏi và sử dụng AI để đưa ra đáp án",
   "permissions": [
     "activeTab",
-    "scripting",
     "storage",
+    "scripting",
     "tabs",
-    "clipboardWrite"
+    "unlimitedStorage"
   ],
-  
   "host_permissions": [
-    "https://api-inference.huggingface.co/*",
-    "https://api.ocr.space/*",
-    "https://api.groq.com/*",
-    "http://localhost:11434/*"
+    "https://api.openai.com/*",
+    "https://api.ocr.space/*"
   ],
-  
   "background": {
     "service_worker": "background.js"
   },
-  
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_end"
+      "js": ["content.js"]
     }
   ],
-  
+  "web_accessible_resources": [
+    {
+      "resources": ["html2canvas.min.js", "tesseract.min.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "AI Answer Assistant",
-    "default_icon": "icon.png"
-  },
-  
-  "commands": {
-    "activate_ai": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+Q",
-        "mac": "Command+Shift+Q",
-        "windows": "Ctrl+Shift+Q",
-        "chromeos": "Ctrl+Shift+Q",
-        "linux": "Ctrl+Shift+Q"
-      },
-      "description": "Activate AI Answer Assistant screen selection"
+    "default_icon": {
+      "16": "icon.png",
+      "32": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
     }
   },
-  
   "icons": {
     "16": "icon.png",
+    "32": "icon.png",
     "48": "icon.png",
     "128": "icon.png"
-  },
-  
-  "web_accessible_resources": [
-    {
-      "resources": ["utils/*.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }
