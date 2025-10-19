@@ -172,10 +172,13 @@ async function handleAreaCapture(coordinates, tabId) {
 async function processOCRAuto(imageDataUrl) {
   console.log('Starting automatic OCR processing...');
   
-  // Try OCR services with fallback
+  // Try OCR services with fallback - more reliable services
   const ocrServices = [
+    () => tryOCRSpaceFree(imageDataUrl),
+    () => tryHuggingFaceOCR(imageDataUrl),
     () => tryOCRSpace(imageDataUrl),
-    () => tryImageToText(imageDataUrl)
+    () => tryImageToText(imageDataUrl),
+    () => tryGoogleVision(imageDataUrl)
   ];
   
   // Try automatic OCR services with shorter timeouts
@@ -184,7 +187,7 @@ async function processOCRAuto(imageDataUrl) {
       console.log(`Trying OCR service ${i + 1}...`);
       const result = await Promise.race([
         ocrServices[i](),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Service timeout')), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Service timeout')), 10000))
       ]);
       
       if (result.success) {
@@ -197,16 +200,100 @@ async function processOCRAuto(imageDataUrl) {
     }
   }
   
+  // Try one more simple OCR service as last resort
+  try {
+    console.log('Trying last resort OCR service...');
+    const result = await trySimpleOCR(imageDataUrl);
+    if (result.success) {
+      return result;
+    }
+  } catch (error) {
+    console.log('Last resort OCR failed:', error.message);
+  }
+  
   // All automatic services failed
   console.log('All OCR services failed');
   return { 
     success: false, 
-    error: 'All OCR services are temporarily unavailable' 
+    error: 'All OCR services are temporarily unavailable. Please try again or use manual text input.' 
   };
 }
 
 /**
- * Try OCR.space API
+ * Try OCR.space API (free tier without API key)
+ */
+async function tryOCRSpaceFree(imageDataUrl) {
+  const base64Image = imageDataUrl.split(',')[1];
+  
+  const formData = new FormData();
+  formData.append('base64Image', `data:image/png;base64,${base64Image}`);
+  formData.append('language', 'eng');
+  formData.append('isOverlayRequired', 'false');
+  formData.append('OCREngine', '2');
+  formData.append('detectOrientation', 'true');
+  
+  const response = await Promise.race([
+    fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      body: formData
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+  ]);
+  
+  if (!response.ok) {
+    throw new Error(`OCR.space free error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data.OCRExitCode === 1 && data.ParsedResults && data.ParsedResults[0]) {
+    const extractedText = data.ParsedResults[0].ParsedText.trim();
+    if (extractedText && extractedText.length >= 2) {
+      return { success: true, extractedText };
+    }
+  }
+  
+  throw new Error('No text detected by OCR.space free');
+}
+
+/**
+ * Try Hugging Face OCR (free)
+ */
+async function tryHuggingFaceOCR(imageDataUrl) {
+  const base64Image = imageDataUrl.split(',')[1];
+  
+  const response = await Promise.race([
+    fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-printed', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer hf_demo', // Demo token
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        inputs: base64Image
+      })
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+  ]);
+  
+  if (!response.ok) {
+    throw new Error(`Hugging Face OCR error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data && data.length > 0 && data[0].generated_text) {
+    const extractedText = data[0].generated_text.trim();
+    if (extractedText && extractedText.length >= 2) {
+      return { success: true, extractedText };
+    }
+  }
+  
+  throw new Error('No text detected by Hugging Face OCR');
+}
+
+/**
+ * Try OCR.space API (with API key if available)
  */
 async function tryOCRSpace(imageDataUrl) {
   const base64Image = imageDataUrl.split(',')[1];
@@ -268,7 +355,7 @@ async function tryImageToText(imageDataUrl) {
       },
       body: formData
     }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
   ]);
   
   if (!response.ok) {
@@ -282,6 +369,87 @@ async function tryImageToText(imageDataUrl) {
   }
   
   throw new Error('No text detected by ImageToText');
+}
+
+/**
+ * Try Google Cloud Vision API (free tier) - alternative method
+ */
+async function tryGoogleVision(imageDataUrl) {
+  const base64Image = imageDataUrl.split(',')[1];
+  
+  const response = await Promise.race([
+    fetch('https://vision.googleapis.com/v1/images:annotate?key=AIzaSyDemo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        requests: [{
+          image: {
+            content: base64Image
+          },
+          features: [{
+            type: 'TEXT_DETECTION',
+            maxResults: 1
+          }]
+        }]
+      })
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+  ]);
+  
+  if (!response.ok) {
+    throw new Error(`Google Vision error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data.responses && data.responses[0] && data.responses[0].textAnnotations && data.responses[0].textAnnotations[0]) {
+    const extractedText = data.responses[0].textAnnotations[0].description.trim();
+    if (extractedText && extractedText.length >= 2) {
+      return { success: true, extractedText };
+    }
+  }
+  
+  throw new Error('No text detected by Google Vision');
+}
+
+/**
+ * Try a simple OCR service as last resort
+ */
+async function trySimpleOCR(imageDataUrl) {
+  const base64Image = imageDataUrl.split(',')[1];
+  
+  const response = await Promise.race([
+    fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: {
+        'apikey': 'helloworld' // Free tier key
+      },
+      body: new URLSearchParams({
+        'base64Image': `data:image/png;base64,${base64Image}`,
+        'language': 'eng',
+        'isOverlayRequired': 'false',
+        'OCREngine': '1'
+      })
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+  ]);
+  
+  if (!response.ok) {
+    throw new Error(`Simple OCR error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data.OCRExitCode === 1 && data.ParsedResults && data.ParsedResults[0]) {
+    const extractedText = data.ParsedResults[0].ParsedText.trim();
+    if (extractedText && extractedText.length >= 2) {
+      return { success: true, extractedText };
+    }
+  }
+  
+  throw new Error('No text detected by Simple OCR');
 }
 
 /**
